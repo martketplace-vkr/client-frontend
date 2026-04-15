@@ -3,6 +3,7 @@ export const navItems = [
   { path: '/catalog', label: 'Каталог', page: 'catalog' },
   { path: '/favorites', label: 'Избранное', page: 'favorites' },
   { path: '/cart', label: 'Корзина', page: 'cart' },
+  { path: '/wallet', label: 'Кошелек', page: 'wallet' },
   { path: '/account', label: 'Профиль', page: 'account' },
 ]
 

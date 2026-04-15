@@ -1,4 +1,5 @@
 const ACCESS_TOKEN_KEY = 'marketplace.gateway.access_token'
+const REFRESH_TOKEN_KEY = 'marketplace.gateway.refresh_token'
 
 export class ApiError extends Error {
   constructor(message, status = 0, payload = null) {
@@ -13,6 +14,10 @@ export function getStoredAccessToken() {
   return localStorage.getItem(ACCESS_TOKEN_KEY) || ''
 }
 
+export function getStoredRefreshToken() {
+  return localStorage.getItem(REFRESH_TOKEN_KEY) || ''
+}
+
 export function setStoredAccessToken(token) {
   if (token) {
     localStorage.setItem(ACCESS_TOKEN_KEY, token)
@@ -22,8 +27,17 @@ export function setStoredAccessToken(token) {
   localStorage.removeItem(ACCESS_TOKEN_KEY)
 }
 
+export function setStoredRefreshToken(token) {
+  if (token) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token)
+    return
+  }
+
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
+}
+
 export function getApiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || ''
+  return (import.meta.env.VITE_API_BASE_URL || 'https://marketplace.vitalmeuble.online').replace(/\/+$/, '')
 }
 
 export async function apiRequest(path, { method = 'GET', body, token } = {}) {

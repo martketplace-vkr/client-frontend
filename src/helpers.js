@@ -179,6 +179,52 @@ export function formatPrice(value) {
   return normalized
 }
 
+export function formatMoney(money, fallback = '0') {
+  const amount = toText(money?.amount ?? money).trim()
+  if (!amount) {
+    return fallback
+  }
+
+  const currencyCode = toText(money?.currencyCode ?? money?.currency_code).trim()
+  const suffix = currencyCode === '2001' ? 'USDT' : currencyCode
+
+  return [amount, suffix].filter(Boolean).join(' ')
+}
+
+export function formatDateTime(value) {
+  const raw = toText(value?.seconds ? Number(value.seconds) * 1000 : value).trim()
+  if (!raw) {
+    return '—'
+  }
+
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) {
+    return raw
+  }
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
+export function compactStatus(value) {
+  return toText(value).replace(/^[A-Z_]+_STATUS_/, '').replace(/_/g, ' ').toLowerCase() || 'unknown'
+}
+
+export function copyText(value) {
+  const text = toText(value)
+  if (!text) {
+    return Promise.resolve(false)
+  }
+
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).then(() => true)
+  }
+
+  return Promise.resolve(false)
+}
+
 export function productMatchesQuery(product, query) {
   const normalized = toText(query).trim().toLowerCase()
   if (!normalized) {
