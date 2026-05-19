@@ -1744,6 +1744,13 @@
   object-fit: cover;
 }
 
+.account-review-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
 .review-preview-grid,
 .review-images {
   display: grid;
@@ -2690,8 +2697,12 @@
   position: absolute;
   top: 16px;
   right: 16px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
   width: 40px;
   height: 40px;
+  padding: 0;
   border: 0;
   border-radius: 999px;
   background: rgba(241, 245, 255, 0.96);

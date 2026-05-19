@@ -129,8 +129,14 @@ export function AccountPage({
             <AccountReviewsSection
               isAuthorized={isAuthorized}
               orders={orders}
+              busyKeys={busyKeys}
+              reviewForm={reviewForm}
               myProductReviews={myProductReviews}
               onOpenProduct={onOpenProduct}
+              onReviewFormChange={onReviewFormChange}
+              onReviewImageUpload={onReviewImageUpload}
+              onRemoveReviewImage={onRemoveReviewImage}
+              onReviewSubmit={onReviewSubmit}
             />
           ) : null}
 
@@ -609,8 +615,39 @@ function StarInput({ value, onChange }) {
   )
 }
 
-function AccountReviewsSection({ isAuthorized, orders, myProductReviews = {}, onOpenProduct }) {
+function AccountReviewsSection({
+  isAuthorized,
+  orders,
+  busyKeys,
+  reviewForm,
+  myProductReviews = {},
+  onOpenProduct,
+  onReviewFormChange,
+  onReviewImageUpload,
+  onRemoveReviewImage,
+  onReviewSubmit,
+}) {
   const reviews = buildMyReviewItems(orders, myProductReviews)
+  const [reviewTarget, setReviewTarget] = useState(null)
+
+  function openReviewEditor(product, review) {
+    const productId = toText(review?.product_id ?? review?.productId ?? getProductId(product))
+    const productName = getProductName(product) || `Товар #${productId}`
+
+    setReviewTarget({ productId, productName, mode: 'update' })
+    onReviewFormChange?.(reviewToForm(review))
+  }
+
+  function closeReviewEditor() {
+    setReviewTarget(null)
+  }
+
+  async function submitReview(event) {
+    const saved = await onReviewSubmit(event, reviewTarget?.productId)
+    if (saved) {
+      closeReviewEditor()
+    }
+  }
 
   return (
     <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
@@ -656,12 +693,51 @@ function AccountReviewsSection({ isAuthorized, orders, myProductReviews = {}, on
                       ))}
                     </div>
                   ) : null}
+
+                  <div className="account-review-card__actions">
+                    <button
+                      className="button button-secondary button-small"
+                      type="button"
+                      onClick={() => openReviewEditor(product, review)}
+                    >
+                      Изменить отзыв
+                    </button>
+                  </div>
                 </div>
               </article>
             )
           })}
         </div>
       )}
+
+      {reviewTarget ? (
+        <div
+          className="modal-overlay review-modal-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeReviewEditor()
+            }
+          }}
+        >
+          <div className="surface-card modal-card review-modal-card" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+            <button className="modal-close" type="button" onClick={closeReviewEditor} aria-label="Закрыть">
+              ×
+            </button>
+            <OrderReviewForm
+              productName={reviewTarget.productName}
+              mode={reviewTarget.mode}
+              form={reviewForm}
+              busyKeys={busyKeys}
+              onChange={onReviewFormChange}
+              onImageUpload={onReviewImageUpload}
+              onRemoveImage={onRemoveReviewImage}
+              onSubmit={submitReview}
+              onCancel={closeReviewEditor}
+            />
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }
