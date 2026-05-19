@@ -1,87 +1,35 @@
-import { promoCards, serviceCards } from '../marketplaceContent'
-import { ProductGrid, ProductMiniRail } from '../components/storefront/ProductSections'
+import { ProductGrid } from '../components/storefront/ProductSections'
 
 export function HomePage({
-  featuredProducts,
-  latestProducts,
-  popularCategories,
+  homeProducts,
   favoriteIds,
   busyProducts,
-  onCategorySelect,
+  hasMoreProducts,
+  loadingMoreProducts,
   onOpenProduct,
   onToggleFavorite,
-  onAddToCart,
-  onGoCatalog,
+  onLoadMoreProducts,
+  reviewSummaries,
 }) {
   return (
-    <div className="page-content">
+    <div className="page-content home-feed">
+      <ProductGrid
+        products={homeProducts}
+        favoriteIds={favoriteIds}
+        onOpenProduct={onOpenProduct}
+        onToggleFavorite={onToggleFavorite}
+        reviewSummaries={reviewSummaries}
+        emptyMessage={busyProducts ? 'Загружаем товары...' : 'Каталог пуст. Проверьте API или добавьте товары.'}
+        variant="feed"
+      />
 
-      <section className="promo-grid">
-        {promoCards.map((card) => (
-          <article key={card.title} className="surface-card promo-card">
-            <span className="promo-card__badge">{card.badge}</span>
-            <h2>{card.title}</h2>
-            <p>{card.text}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="section-block">
-        <div className="section-head">
-          <div>
-            <span className="eyebrow">категории</span>
-            <h2>Популярные разделы</h2>
-          </div>
-          <button className="button button-ghost" type="button" onClick={onGoCatalog}>
-            Весь каталог
+      {hasMoreProducts ? (
+        <div className="pagination-footer">
+          <button className="button button-secondary load-more-button" type="button" onClick={onLoadMoreProducts} disabled={loadingMoreProducts}>
+            {loadingMoreProducts ? 'Загружаем...' : 'Показать ещё'}
           </button>
         </div>
-
-        <div className="category-pills">
-          {popularCategories.length === 0 ? (
-            <div className="empty-panel">Категории появятся, когда API вернет дерево каталога.</div>
-          ) : (
-            popularCategories.map((category) => (
-              <button
-                key={category.value}
-                className="category-pill"
-                type="button"
-                onClick={() => onCategorySelect(category.value)}
-              >
-                {category.label.trim()}
-              </button>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="section-block">
-        <div className="section-head">
-          <div>
-            <span className="eyebrow">подборка</span>
-            <h2>Товары дня</h2>
-          </div>
-          <span className="section-note">{busyProducts ? 'Загружаем каталог...' : 'Подходит для промо-блока на главной'}</span>
-        </div>
-
-        <ProductGrid
-          products={featuredProducts}
-          favoriteIds={favoriteIds}
-          onOpenProduct={onOpenProduct}
-          onToggleFavorite={onToggleFavorite}
-          onAddToCart={onAddToCart}
-          emptyMessage="Каталог пуст. Проверьте API или выберите другой раздел."
-        />
-      </section>
-
-      <section className="service-grid">
-        {serviceCards.map((card) => (
-          <article key={card.title} className="surface-card service-card">
-            <h3>{card.title}</h3>
-            <p>{card.text}</p>
-          </article>
-        ))}
-      </section>
+      ) : null}
     </div>
   )
 }

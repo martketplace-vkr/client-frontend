@@ -46,7 +46,6 @@ export function WalletPage({
     <div className="page-content wallet-layout">
       <section className="surface-card wallet-hero">
         <div>
-          <span className="eyebrow">кошелек</span>
           <h1>Мои кошельки</h1>
           <p>Рублевый баланс для покупок и криптовый USDT TRC-20 кошелек для депозитов.</p>
         </div>
@@ -129,7 +128,6 @@ function WalletDetails({ wallet, transactions, onBack, onReloadDashboard, hasPri
 
       {isUsdt ? (
         <section className="surface-card wallet-info-card">
-          <span className="eyebrow">адрес пополнения</span>
           <h2>USDT TRC-20</h2>
           <p>Отправляй только USDT в сети TRON/TRC-20. Перевод другой валюты или сети может быть потерян.</p>
           <div className="wallet-address-box">
@@ -143,7 +141,6 @@ function WalletDetails({ wallet, transactions, onBack, onReloadDashboard, hasPri
 
       {isUsdt ? (
         <section className="surface-card wallet-info-card">
-          <span className="eyebrow">ledger</span>
           <h2>Последние операции</h2>
           <div className="account-list">
             {transactions.length === 0 ? (

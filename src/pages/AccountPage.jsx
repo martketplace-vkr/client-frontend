@@ -1,15 +1,25 @@
 import { useState } from 'react'
 import { ProductGrid } from '../components/storefront/ProductSections'
-import { compactStatus, copyText, formatDateTime, formatMoney, getAddressParts, getProductId, toText } from '../helpers'
+import {
+  compactStatus,
+  copyText,
+  formatDateTime,
+  formatPrice,
+  getAddressParts,
+  getProductId,
+  getProductName,
+  resolveProductImage,
+  toText,
+} from '../helpers'
 import { Field, FileUploadField } from '../ui'
 
 const ACCOUNT_NAV_ITEMS = [
   { id: 'personal', label: 'Личные данные', icon: 'user' },
   { id: 'delivery', label: 'Доставка', icon: 'bag' },
   { id: 'orders', label: 'Заказы', icon: 'box' },
+  { id: 'reviews', label: 'Отзывы', icon: 'star' },
   { id: 'wallet', label: 'Кошелек', icon: 'card' },
   { id: 'favorites', label: 'Избранное', icon: 'heart' },
-  { id: 'reviews', label: 'Отзывы', icon: 'star' },
 ]
 
 export function AccountPage({
@@ -38,6 +48,13 @@ export function AccountPage({
   onToggleFavorite,
   onAddToCart,
   hasPrivateData,
+  reviewSummaries,
+  myProductReviews,
+  reviewForm,
+  onReviewFormChange,
+  onReviewImageUpload,
+  onRemoveReviewImage,
+  onReviewSubmit,
 }) {
   const [activeNavItem, setActiveNavItem] = useState('personal')
 
@@ -98,10 +115,24 @@ export function AccountPage({
               orders={orders}
               busyKeys={busyKeys}
               onCancelOrder={onCancelOrder}
+              onOpenProduct={onOpenProduct}
+              reviewForm={reviewForm}
+              myProductReviews={myProductReviews}
+              onReviewFormChange={onReviewFormChange}
+              onReviewImageUpload={onReviewImageUpload}
+              onRemoveReviewImage={onRemoveReviewImage}
+              onReviewSubmit={onReviewSubmit}
             />
           ) : null}
 
-          {activeNavItem === 'reviews' ? <ReviewsSection isAuthorized={isAuthorized} /> : null}
+          {activeNavItem === 'reviews' ? (
+            <AccountReviewsSection
+              isAuthorized={isAuthorized}
+              orders={orders}
+              myProductReviews={myProductReviews}
+              onOpenProduct={onOpenProduct}
+            />
+          ) : null}
 
           {activeNavItem === 'wallet' ? (
             <AccountWalletSection
@@ -119,6 +150,7 @@ export function AccountPage({
           {activeNavItem === 'favorites' ? (
             <AccountFavoritesSection
               favoriteItems={favoriteItems}
+              reviewSummaries={reviewSummaries}
               onOpenProduct={onOpenProduct}
               onToggleFavorite={onToggleFavorite}
               onAddToCart={onAddToCart}
@@ -145,7 +177,6 @@ function PersonalSection({
     <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
       <div className="section-head">
         <div>
-          <span className="eyebrow">аккаунт</span>
         </div>
       </div>
 
@@ -215,7 +246,6 @@ function DeliverySection({
     <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
       <div className="section-head">
         <div>
-          <span className="eyebrow">адреса</span>
           <h2>Доставка</h2>
         </div>
         <button
@@ -285,57 +315,353 @@ function DeliverySection({
   )
 }
 
-function OrdersSection({ isAuthorized, orders, busyKeys, onCancelOrder }) {
+function OrdersSection({
+  isAuthorized,
+  orders,
+  busyKeys,
+  onCancelOrder,
+  onOpenProduct,
+  reviewForm,
+  myProductReviews = {},
+  onReviewFormChange,
+  onReviewImageUpload,
+  onRemoveReviewImage,
+  onReviewSubmit,
+}) {
+  const orderGroups = groupOrders(orders)
+  const [reviewTarget, setReviewTarget] = useState(null)
+
+  function openReviewForm(target, review) {
+    setReviewTarget(target)
+    onReviewFormChange?.(reviewToForm(review))
+  }
+
+  function closeReviewForm() {
+    setReviewTarget(null)
+  }
+
+  async function submitReview(event) {
+    const saved = await onReviewSubmit(event, reviewTarget?.productId)
+    if (saved) {
+      closeReviewForm()
+    }
+  }
+
   return (
     <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
       <div className="section-head">
         <div>
-          <span className="eyebrow">заказы</span>
           <h2>История заказов</h2>
         </div>
       </div>
 
-      <div className="account-list">
-        {orders.length === 0 ? (
+      <div className="order-history">
+        {orderGroups.length === 0 ? (
           <div className="empty-panel compact-empty">Заказов пока нет.</div>
         ) : (
-          orders.map((order) => (
-            <article key={toText(order.id)} className="account-row order-row">
-              <div>
-                <strong>Заказ #{toText(order.id)}</strong>
-                <span>{order.product?.productName || order.product?.product_name || 'Товар'}</span>
-                <span>{formatDateTime(order.createdAt ?? order.created_at)}</span>
-              </div>
-              <div>
-                <strong>{formatMoney(order.totalPrice ?? order.total_price)}</strong>
-                <span>{compactStatus(order.status)}</span>
-              </div>
-              <button
-                className="button button-ghost button-small"
-                type="button"
-                onClick={() => onCancelOrder(order.id)}
-                disabled={!isAuthorized || busyKeys[`order-${order.id}`] || !canCancelOrder(order)}
-              >
-                Отменить
-              </button>
-            </article>
-          ))
+          orderGroups.map((group) => {
+            const cancellableOrders = group.items.filter(canCancelOrder)
+            const isCancelling = group.items.some((order) => busyKeys[`order-${getOrderId(order)}`])
+
+            return (
+              <article key={group.key} className="order-card">
+                <div className="order-card__top">
+                  <div className="order-card__title">
+                    <h3>
+                      {getOrderStatusLabel(group.status)} {formatOrderDay(group.createdAt)}
+                    </h3>
+                    <span>{getOrderSubtitle(group)}</span>
+                  </div>
+                  <div className="order-card__meta">
+                    <span className={`order-status-pill status-${normalizeStatus(group.status)}`}>
+                      {getOrderStatusLabel(group.status)}
+                    </span>
+                    <span>{getOrderCode(group)}</span>
+                  </div>
+                </div>
+
+                <div className="order-card__body">
+                  <div className="order-card__summary">
+                    <span>Сумма заказа</span>
+                    <strong>{getOrderGroupTotal(group)}</strong>
+                    <small>{group.items.length} {pluralizeProducts(group.items.length)}</small>
+                    <button
+                      className="button button-ghost button-small"
+                      type="button"
+                      onClick={() => cancellableOrders.forEach((order) => onCancelOrder(getOrderId(order)))}
+                      disabled={!isAuthorized || isCancelling || cancellableOrders.length === 0}
+                    >
+                      {isCancelling ? 'Отменяем...' : 'Отменить заказ'}
+                    </button>
+                  </div>
+
+                  <div className="order-product-grid">
+                    {group.items.map((order, index) => {
+                      const product = buildOrderProduct(order)
+                      const productId = getProductId(product)
+                      const productName = getProductName(product) || 'Товар'
+                      const imageUrl = resolveProductImage(product)
+                      const quantity = getOrderQuantity(order)
+                      const unitPrice = getOrderUnitPrice(order)
+                      const lineTotal = getOrderLineTotal(order)
+                      const tileKey = `${getOrderId(order)}-${productId || index}`
+                      const canReviewProduct = canReviewOrder(order) && Boolean(productId)
+                      const myReview = productId ? myProductReviews[productId] : null
+                      const hasMyReview = Boolean(myReview)
+
+                      return (
+                        <article
+                          key={tileKey}
+                          className={`order-product-tile ${productId ? '' : 'order-product-tile--disabled'}`}
+                        >
+                          <button
+                            className="order-product-tile__open"
+                            type="button"
+                            onClick={() => onOpenProduct(product)}
+                            disabled={!productId}
+                            aria-label={`Открыть карточку ${productName}`}
+                          >
+                            <span className="order-product-tile__image">
+                              {imageUrl ? (
+                                <img src={imageUrl} alt={productName} />
+                              ) : (
+                                <span className="image-fallback">{productName.slice(0, 1) || '?'}</span>
+                              )}
+                            </span>
+                            <strong className="order-product-tile__name">{productName}</strong>
+                            <dl className="order-product-tile__details">
+                              <div>
+                                <dt>Кол-во</dt>
+                                <dd>{quantity}</dd>
+                              </div>
+                              <div>
+                                <dt>За единицу</dt>
+                                <dd>{formatPrice(unitPrice)}</dd>
+                              </div>
+                              <div className="order-product-tile__line-total">
+                                <dt>За товар</dt>
+                                <dd>{formatPrice(lineTotal)}</dd>
+                              </div>
+                            </dl>
+                          </button>
+
+                          {canReviewProduct ? (
+                            <div className="order-product-review">
+                              {hasMyReview ? (
+                                <span className="order-product-review__status">
+                                  Отзыв оставлен <b>★ {toText(myReview.rating)}</b>
+                                </span>
+                              ) : null}
+                              <button
+                                className="button button-secondary button-small"
+                                type="button"
+                                onClick={() => openReviewForm({ productId, productName, mode: hasMyReview ? 'update' : 'create' }, myReview)}
+                              >
+                                {hasMyReview ? 'Изменить отзыв' : 'Оставить отзыв'}
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
+                      )
+                    })}
+                  </div>
+                </div>
+              </article>
+            )
+          })
         )}
       </div>
+
+      {reviewTarget ? (
+        <div
+          className="modal-overlay review-modal-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeReviewForm()
+            }
+          }}
+        >
+          <div className="surface-card modal-card review-modal-card" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+            <button className="modal-close" type="button" onClick={closeReviewForm} aria-label="Закрыть">
+              ×
+            </button>
+            <OrderReviewForm
+              productName={reviewTarget.productName}
+              mode={reviewTarget.mode}
+              form={reviewForm}
+              busyKeys={busyKeys}
+              onChange={onReviewFormChange}
+              onImageUpload={onReviewImageUpload}
+              onRemoveImage={onRemoveReviewImage}
+              onSubmit={submitReview}
+              onCancel={closeReviewForm}
+            />
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }
 
-function ReviewsSection({ isAuthorized }) {
+function OrderReviewForm({
+  productName,
+  mode = 'create',
+  form = { rating: 5, comment: '', imageUrls: [] },
+  busyKeys,
+  onChange,
+  onImageUpload,
+  onRemoveImage,
+  onSubmit,
+  onCancel,
+}) {
+  const imageUrls = Array.isArray(form.imageUrls) ? form.imageUrls : []
+
+  return (
+    <form className="review-form order-review-form" onSubmit={onSubmit}>
+      <div className="review-form__top">
+        <div>
+          <strong id="review-modal-title">Отзыв о товаре</strong>
+          {productName ? <span>{productName}</span> : null}
+        </div>
+        <StarInput value={form.rating} onChange={(rating) => onChange?.({ rating })} />
+      </div>
+
+      <textarea
+        className="review-textarea"
+        rows={4}
+        value={form.comment}
+        onChange={(event) => onChange?.({ comment: event.target.value })}
+        placeholder="Расскажите, что понравилось или не понравилось"
+        required
+      />
+
+      {imageUrls.length > 0 ? (
+        <div className="review-preview-grid">
+          {imageUrls.map((imageUrl) => (
+            <button
+              key={imageUrl}
+              className="review-preview"
+              type="button"
+              onClick={() => onRemoveImage?.(imageUrl)}
+              aria-label="Удалить фото из отзыва"
+            >
+              <img src={imageUrl} alt="" />
+              <span>Удалить</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="inline-actions">
+        <label className={`review-upload ${busyKeys.reviewImages || imageUrls.length >= 6 ? 'disabled' : ''}`}>
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={onImageUpload}
+            disabled={busyKeys.reviewImages || imageUrls.length >= 6}
+          />
+          {busyKeys.reviewImages ? 'Загружаем...' : 'Добавить фото'}
+        </label>
+        <button className="button button-primary button-small" type="submit" disabled={busyKeys.reviewSubmit}>
+          {busyKeys.reviewSubmit ? 'Сохраняем...' : mode === 'update' ? 'Обновить отзыв' : 'Опубликовать'}
+        </button>
+        <button className="button button-ghost button-small" type="button" onClick={onCancel}>
+          Отмена
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function reviewToForm(review) {
+  if (!review) {
+    return { rating: 5, comment: '', imageUrls: [] }
+  }
+
+  const images = Array.isArray(review.images) ? review.images : []
+
+  return {
+    rating: Number.parseInt(review.rating, 10) || 5,
+    comment: toText(review.comment),
+    imageUrls: images.map((image) => toText(image?.url)).filter(Boolean),
+  }
+}
+
+function StarInput({ value, onChange }) {
+  const rating = Number.parseInt(value, 10) || 5
+
+  return (
+    <div className="star-input" aria-label="Оценка товара">
+      {[1, 2, 3, 4, 5].map((item) => (
+        <button
+          key={item}
+          className={item <= rating ? 'active' : ''}
+          type="button"
+          onClick={() => onChange?.(item)}
+          aria-label={`${item} из 5`}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function AccountReviewsSection({ isAuthorized, orders, myProductReviews = {}, onOpenProduct }) {
+  const reviews = buildMyReviewItems(orders, myProductReviews)
+
   return (
     <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
       <div className="section-head">
         <div>
-          <span className="eyebrow">отзывы</span>
-          <h2>Отзывы</h2>
+          <h2>Мои отзывы</h2>
         </div>
       </div>
-      <div className="empty-panel compact-empty">Отзывов пока нет.</div>
+
+      {reviews.length === 0 ? (
+        <div className="empty-panel compact-empty">Вы пока не оставляли отзывы.</div>
+      ) : (
+        <div className="account-review-list">
+          {reviews.map(({ product, review }) => {
+            const productName = getProductName(product) || `Товар #${toText(review.product_id ?? review.productId)}`
+            const imageUrl = resolveProductImage(product)
+            const images = Array.isArray(review.images) ? review.images : []
+
+            return (
+              <article key={toText(review.id)} className="account-review-card">
+                <button className="account-review-card__product" type="button" onClick={() => onOpenProduct(product)}>
+                  <span className="account-review-card__image">
+                    {imageUrl ? <img src={imageUrl} alt={productName} /> : <span className="image-fallback">{productName.slice(0, 1) || '?'}</span>}
+                  </span>
+                  <span>
+                    <strong>{productName}</strong>
+                    <small>{formatDateTime(review.updated_at ?? review.updatedAt ?? review.created_at ?? review.createdAt)}</small>
+                  </span>
+                </button>
+
+                <div className="account-review-card__body">
+                  <div className="account-review-card__rating" aria-label={`${toText(review.rating)} из 5`}>
+                    {[1, 2, 3, 4, 5].map((item) => (
+                      <span key={item} className={item <= Number.parseInt(review.rating, 10) ? 'active' : ''}>★</span>
+                    ))}
+                  </div>
+                  <p>{toText(review.comment)}</p>
+
+                  {images.length > 0 ? (
+                    <div className="account-review-card__images">
+                      {images.map((image, index) => (
+                        <img key={`${toText(image?.url)}-${index}`} src={toText(image?.url)} alt="" />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      )}
     </section>
   )
 }
@@ -405,7 +731,7 @@ function AccountWalletSection({
 
         {isUsdt ? (
           <section className="surface-card wallet-info-card">
-            <span className="eyebrow">адрес пополнения</span>
+    
             <h2>USDT TRC-20</h2>
             <div className="wallet-address-box">
               <code>{selectedWallet.address || 'Адрес еще не создан.'}</code>
@@ -418,7 +744,7 @@ function AccountWalletSection({
 
         {isUsdt ? (
           <section className="surface-card wallet-info-card">
-            <span className="eyebrow">ledger</span>
+      
             <h2>Последние операции</h2>
             <div className="account-list">
               {transactions.length === 0 ? (
@@ -448,7 +774,6 @@ function AccountWalletSection({
     <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
       <div className="section-head">
         <div>
-          <span className="eyebrow">кошелек</span>
         </div>
       </div>
 
@@ -479,12 +804,11 @@ function AccountWalletSection({
   )
 }
 
-function AccountFavoritesSection({ favoriteItems, onOpenProduct, onToggleFavorite, onAddToCart }) {
+function AccountFavoritesSection({ favoriteItems, reviewSummaries, onOpenProduct, onToggleFavorite, onAddToCart }) {
   return (
     <section className="surface-card account-panel">
       <div className="section-head">
         <div>
-          <span className="eyebrow">избранное</span>
           <h2>Избранные товары</h2>
         </div>
       </div>
@@ -495,6 +819,7 @@ function AccountFavoritesSection({ favoriteItems, onOpenProduct, onToggleFavorit
         onOpenProduct={onOpenProduct}
         onToggleFavorite={onToggleFavorite}
         onAddToCart={onAddToCart}
+        reviewSummaries={reviewSummaries}
         emptyMessage="Пока пусто. Добавьте товары из каталога или карточки товара."
       />
     </section>
@@ -590,7 +915,283 @@ function AccountNavIcon({ name }) {
   )
 }
 
+const ORDER_STATUS_LABELS = {
+  created: 'Создан',
+  waiting_for_payment: 'Ожидает оплаты',
+  assembly: 'Собирается',
+  delivery_to_pick_up: 'Едет в пункт выдачи',
+  delivery_to_client: 'Едет к вам',
+  waiting_pick_up: 'Ждет получения',
+  success: 'Получен',
+  cancelled: 'Отменен',
+  canceled: 'Отменен',
+  cancelled_by_client: 'Отменен',
+  cancelled_by_seller: 'Отменен продавцом',
+  canecelled_by_client: 'Отменен',
+  canecelled_by_seller: 'Отменен продавцом',
+}
+
+function groupOrders(orders) {
+  const groups = new Map()
+
+  for (const order of orders) {
+    const checkoutID = getOrderCheckoutId(order)
+    const createdAt = getOrderCreatedAt(order)
+    const dateKey = toDateKey(createdAt)
+    const key = checkoutID || (dateKey ? `date-${dateKey}` : `order-${getOrderId(order)}`)
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        checkoutID,
+        createdAt,
+        status: order?.status,
+        items: [],
+      })
+    }
+
+    groups.get(key).items.push(order)
+  }
+
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    status: resolveGroupStatus(group.items),
+    createdAt: group.createdAt || getOrderCreatedAt(group.items[0]),
+    items: group.items.sort((a, b) => Number.parseInt(getOrderId(a), 10) - Number.parseInt(getOrderId(b), 10)),
+  }))
+}
+
+function resolveGroupStatus(orders) {
+  if (orders.length === 0) {
+    return ''
+  }
+
+  const statuses = orders.map((order) => normalizeStatus(order?.status)).filter(Boolean)
+  const uniqueStatuses = new Set(statuses)
+
+  if (uniqueStatuses.size === 1) {
+    return statuses[0]
+  }
+
+  if (statuses.some((status) => status.includes('cancel'))) {
+    return 'cancelled'
+  }
+
+  return orders[0]?.status || ''
+}
+
+function getOrderId(order) {
+  return toText(order?.id ?? order?.orderId ?? order?.order_id)
+}
+
+function getOrderCheckoutId(order) {
+  return toText(order?.checkoutId ?? order?.checkout_id)
+}
+
+function getOrderCreatedAt(order) {
+  return order?.createdAt ?? order?.created_at ?? order?.updatedAt ?? order?.updated_at ?? ''
+}
+
+function getOrderStatusLabel(status) {
+  const normalized = normalizeStatus(status)
+  return ORDER_STATUS_LABELS[normalized] || compactStatus(status)
+}
+
+function normalizeStatus(status) {
+  return toText(status).trim().toLowerCase().replace(/^[a-z_]+_status_/, '').replace(/[^a-z0-9_]+/g, '_')
+}
+
+function getOrderSubtitle(group) {
+  const totalQuantity = group.items.reduce((sum, order) => sum + getOrderQuantity(order), 0)
+  const dateTime = formatDateTime(group.createdAt)
+
+  return `${totalQuantity} ${pluralizeProducts(totalQuantity)} • ${dateTime}`
+}
+
+function getOrderCode(group) {
+  if (group.checkoutID) {
+    return group.checkoutID
+  }
+
+  const ids = group.items.map(getOrderId).filter(Boolean)
+  if (ids.length === 0) {
+    return 'без номера'
+  }
+
+  if (ids.length === 1) {
+    return `#${ids[0]}`
+  }
+
+  return `#${ids[0]}-${ids[ids.length - 1]}`
+}
+
+function formatOrderDay(value) {
+  const date = parseOrderDate(value)
+  if (!date) {
+    return ''
+  }
+
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+  }).format(date)
+}
+
+function toDateKey(value) {
+  const date = parseOrderDate(value)
+  if (!date) {
+    return ''
+  }
+
+  return date.toISOString()
+}
+
+function parseOrderDate(value) {
+  if (!value) {
+    return null
+  }
+
+  if (typeof value === 'object' && value.seconds) {
+    const date = new Date(Number(value.seconds) * 1000)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function buildOrderProduct(order) {
+  const product = order?.product || {}
+  const productID = toText(product.productId ?? product.product_id ?? order?.productId ?? order?.product_id)
+  const imageURL = toText(product.imageUrl ?? product.image_url ?? order?.productImageUrl ?? order?.product_image_url)
+
+  return {
+    id: productID,
+    productId: productID,
+    vendorId: toText(order?.vendorId ?? order?.vendor_id),
+    name: toText(product.productName ?? product.product_name ?? order?.productName ?? order?.product_name),
+    price: getOrderUnitPrice(order),
+    images: imageURL ? [{ url: imageURL, is_main: true }] : [],
+  }
+}
+
+function buildMyReviewItems(orders, myProductReviews) {
+  const productsById = new Map()
+
+  for (const order of orders || []) {
+    const product = buildOrderProduct(order)
+    const productId = getProductId(product)
+    if (productId && !productsById.has(productId)) {
+      productsById.set(productId, product)
+    }
+  }
+
+  return Object.entries(myProductReviews || {})
+    .filter(([, review]) => review)
+    .map(([productId, review]) => ({
+      product: productsById.get(productId) || {
+        id: productId,
+        productId,
+        name: `Товар #${productId}`,
+        images: [],
+      },
+      review,
+    }))
+    .sort((left, right) => getReviewTime(right.review) - getReviewTime(left.review))
+}
+
+function getReviewTime(review) {
+  const date = new Date(review?.updated_at ?? review?.updatedAt ?? review?.created_at ?? review?.createdAt ?? '')
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime()
+}
+
+function getOrderQuantity(order) {
+  const parsed = Number.parseInt(toText(order?.quantity), 10)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1
+}
+
+function getOrderUnitPrice(order) {
+  return toText(order?.unitPrice ?? order?.unit_price ?? order?.totalPrice ?? order?.total_price)
+}
+
+function getOrderTotal(order) {
+  return toText(order?.totalPrice ?? order?.total_price)
+}
+
+function getOrderLineTotal(order) {
+  const total = getOrderTotal(order)
+  if (total) {
+    return total
+  }
+
+  const unitPrice = parseMoneyAmount(getOrderUnitPrice(order))
+  if (unitPrice !== null) {
+    return unitPrice * getOrderQuantity(order)
+  }
+
+  return getOrderUnitPrice(order)
+}
+
+function getOrderGroupTotal(group) {
+  const totals = group.items.map((order) => parseMoneyAmount(getOrderLineTotal(order)))
+
+  if (totals.every((total) => total !== null)) {
+    return formatPrice(totals.reduce((sum, total) => sum + total, 0))
+  }
+
+  if (group.items.length === 1) {
+    return formatPrice(getOrderLineTotal(group.items[0]))
+  }
+
+  return 'Сумма уточняется'
+}
+
+function parseMoneyAmount(value) {
+  const normalized = toText(value).replace(/\s+/g, '').replace(',', '.')
+  const match = normalized.match(/-?\d+(?:\.\d+)?/)
+  if (!match) {
+    return null
+  }
+
+  const parsed = Number.parseFloat(match[0])
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function pluralizeProducts(count) {
+  const value = Math.abs(count) % 100
+  const last = value % 10
+
+  if (value > 10 && value < 20) {
+    return 'товаров'
+  }
+
+  if (last === 1) {
+    return 'товар'
+  }
+
+  if (last >= 2 && last <= 4) {
+    return 'товара'
+  }
+
+  return 'товаров'
+}
+
 function canCancelOrder(order) {
-  const status = toText(order?.status).toLowerCase()
-  return !['cancelled', 'canceled', 'completed', 'done', 'delivered'].includes(status)
+  const status = normalizeStatus(order?.status)
+  return ![
+    'cancelled',
+    'canceled',
+    'cancelled_by_client',
+    'cancelled_by_seller',
+    'canecelled_by_client',
+    'canecelled_by_seller',
+    'completed',
+    'done',
+    'delivered',
+    'success',
+  ].includes(status)
+}
+
+function canReviewOrder(order) {
+  return normalizeStatus(order?.status) === 'success'
 }

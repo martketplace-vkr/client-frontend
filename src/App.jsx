@@ -20,10 +20,6 @@ function App() {
 
   return (
     <div className="app-shell">
-      <div className="bg-orb bg-orb-one" />
-      <div className="bg-orb bg-orb-two" />
-      <div className="bg-grid" />
-
       <div className="app-frame">
         <SiteHeader {...controller.headerProps} />
 

@@ -28,7 +28,6 @@ export function AuthDialog({
         </button>
 
         <div className="modal-copy">
-          <span className="eyebrow">вход в аккаунт</span>
           <h2 id="auth-dialog-title">{authMode === 'login' ? 'Авторизация' : 'Регистрация'}</h2>
           <p>Профиль доступен только авторизованным пользователям. Войдите, чтобы открыть личный кабинет.</p>
           <p className="auth-switch">

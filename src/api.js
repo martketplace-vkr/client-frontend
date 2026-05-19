@@ -1,6 +1,17 @@
 const ACCESS_TOKEN_KEY = 'marketplace.gateway.access_token'
 const REFRESH_TOKEN_KEY = 'marketplace.gateway.refresh_token'
 const ACCESS_TOKEN_HEADER = 'x-access-token'
+const REFRESH_PATH = '/api/v1/auth/refresh'
+const AUTH_NO_REFRESH_PATHS = new Set([
+  '/api/v1/auth/login',
+  '/api/v1/auth/sign-in',
+  '/api/v1/auth/register',
+  '/api/v1/auth/refresh',
+  '/api/v1/auth/logout',
+  '/api/v1/auth/sign-out',
+])
+
+let refreshPromise = null
 
 export class ApiError extends Error {
   constructor(message, status = 0, payload = null) {
@@ -41,49 +52,11 @@ export function getApiBaseUrl() {
   return (import.meta.env.VITE_API_BASE_URL || 'https://marketplace.vitalmeuble.online').replace(/\/+$/, '')
 }
 
-export async function apiRequest(path, { method = 'GET', body, token } = {}) {
-  const headers = {}
-  const resolvedToken = getStoredAccessToken() || token
-
-  if (body !== undefined) {
-    headers['Content-Type'] = 'application/json'
-  }
-
-  if (resolvedToken) {
-    headers.Authorization = `Bearer ${resolvedToken}`
-  }
-
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    method,
-    credentials: 'include',
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
-
-  const contentType = response.headers.get('content-type') || ''
-  let payload = null
-
-  if (contentType.includes('application/json')) {
-    payload = await response.json()
-  } else {
-    const text = await response.text()
-    payload = text ? { message: text } : null
-  }
-
-  if (!response.ok) {
-    throw new ApiError(
-      payload?.message || payload?.error || `HTTP ${response.status}`,
-      response.status,
-      payload,
-    )
-  }
-
-  syncAccessTokenFromResponse(response)
-
-  return payload || {}
+export async function apiRequest(path, { method = 'GET', body, token, skipAuthRefresh = false } = {}) {
+  return sendJsonRequest(path, { method, body, token, skipAuthRefresh })
 }
 
-export async function uploadMediaFile(file, { token, directory = 'uploads' } = {}) {
+export async function uploadMediaFile(file, { token, directory = 'uploads', skipAuthRefresh = false } = {}) {
   const formData = new FormData()
   const resolvedToken = getStoredAccessToken() || token
   formData.append('file', file)
@@ -104,27 +77,135 @@ export async function uploadMediaFile(file, { token, directory = 'uploads' } = {
     body: formData,
   })
 
-  const contentType = response.headers.get('content-type') || ''
-  const payload = contentType.includes('application/json')
-    ? await response.json()
-    : { message: await response.text() }
+  const payload = await parseResponsePayload(response)
 
   if (!response.ok) {
-    throw new ApiError(
-      payload?.message || payload?.error || `HTTP ${response.status}`,
-      response.status,
-      payload,
-    )
+    if (canRefreshAfter(response, '/api/v1/media/upload', skipAuthRefresh)) {
+      const refreshedToken = await refreshAccessToken()
+      return uploadMediaFile(file, { token: refreshedToken, directory, skipAuthRefresh: true })
+    }
+
+    throw createApiError(response, payload)
   }
 
-  syncAccessTokenFromResponse(response)
+  syncAuthTokens(response, payload)
 
   return payload || {}
 }
 
-function syncAccessTokenFromResponse(response) {
-  const accessToken = response.headers.get(ACCESS_TOKEN_HEADER)?.trim()
-  if (accessToken) {
-    setStoredAccessToken(accessToken)
+async function sendJsonRequest(path, { method = 'GET', body, token, skipAuthRefresh = false } = {}) {
+  const headers = {}
+  const resolvedToken = token === null ? '' : getStoredAccessToken() || token
+
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json'
   }
+
+  if (resolvedToken) {
+    headers.Authorization = `Bearer ${resolvedToken}`
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method,
+    credentials: 'include',
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+
+  const payload = await parseResponsePayload(response)
+
+  if (!response.ok) {
+    if (canRefreshAfter(response, path, skipAuthRefresh)) {
+      const refreshedToken = await refreshAccessToken()
+      return sendJsonRequest(path, { method, body, token: refreshedToken, skipAuthRefresh: true })
+    }
+
+    throw createApiError(response, payload)
+  }
+
+  syncAuthTokens(response, payload)
+
+  return payload || {}
+}
+
+function canRefreshAfter(response, path, skipAuthRefresh) {
+  return response.status === 401 && !skipAuthRefresh && !AUTH_NO_REFRESH_PATHS.has(normalizePath(path))
+}
+
+async function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = requestRefreshToken().catch((error) => {
+      setStoredAccessToken('')
+      setStoredRefreshToken('')
+      throw error
+    }).finally(() => {
+      refreshPromise = null
+    })
+  }
+
+  return refreshPromise
+}
+
+async function requestRefreshToken() {
+  const refreshToken = getStoredRefreshToken()
+  const payload = await sendJsonRequest(REFRESH_PATH, {
+    method: 'POST',
+    body: refreshToken ? { refresh_token: refreshToken } : undefined,
+    token: null,
+    skipAuthRefresh: true,
+  })
+  const accessToken = getPayloadAccessToken(payload)
+
+  if (!accessToken) {
+    throw new ApiError('Не удалось обновить сессию. Войдите снова.', 401, payload)
+  }
+
+  syncAuthTokens(null, payload)
+
+  return accessToken
+}
+
+async function parseResponsePayload(response) {
+  const contentType = response.headers.get('content-type') || ''
+
+  if (contentType.includes('application/json')) {
+    return response.json()
+  }
+
+  const text = await response.text()
+  return text ? { message: text } : null
+}
+
+function createApiError(response, payload) {
+  return new ApiError(
+    payload?.message || payload?.error || `HTTP ${response.status}`,
+    response.status,
+    payload,
+  )
+}
+
+function syncAuthTokens(response, payload) {
+  const headerAccessToken = response?.headers.get(ACCESS_TOKEN_HEADER)?.trim()
+  const payloadAccessToken = getPayloadAccessToken(payload)
+  const payloadRefreshToken = getPayloadRefreshToken(payload)
+
+  if (headerAccessToken || payloadAccessToken) {
+    setStoredAccessToken(headerAccessToken || payloadAccessToken)
+  }
+
+  if (payloadRefreshToken) {
+    setStoredRefreshToken(payloadRefreshToken)
+  }
+}
+
+function getPayloadAccessToken(payload) {
+  return (payload?.accessToken || payload?.access_token || '').trim()
+}
+
+function getPayloadRefreshToken(payload) {
+  return (payload?.refreshToken || payload?.refresh_token || '').trim()
+}
+
+function normalizePath(path) {
+  return String(path).split('?')[0]
 }

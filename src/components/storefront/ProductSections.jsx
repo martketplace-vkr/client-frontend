@@ -8,15 +8,27 @@ import {
   getStockCount,
   resolveProductImage,
   shortText,
+  toText,
 } from '../../helpers'
 
-export function ProductGrid({ products, favoriteIds, onOpenProduct, onToggleFavorite, onAddToCart, emptyMessage }) {
+export function ProductGrid({
+  products = [],
+  favoriteIds = [],
+  onOpenProduct,
+  onToggleFavorite,
+  onAddToCart,
+  emptyMessage,
+  variant = 'default',
+  reviewSummaries = {},
+}) {
   if (products.length === 0) {
     return <div className="surface-card empty-panel large-empty">{emptyMessage}</div>
   }
 
+  const gridClassName = variant === 'feed' ? 'product-grid product-grid--feed' : 'product-grid'
+
   return (
-    <div className="product-grid">
+    <div className={gridClassName}>
       {products.map((product) => (
         <ProductCard
           key={getProductId(product)}
@@ -25,6 +37,8 @@ export function ProductGrid({ products, favoriteIds, onOpenProduct, onToggleFavo
           onOpen={onOpenProduct}
           onToggleFavorite={onToggleFavorite}
           onAddToCart={onAddToCart}
+          variant={variant}
+          reviewSummary={reviewSummaries[getProductId(product)]}
         />
       ))}
     </div>
@@ -87,7 +101,37 @@ export function QuantityStepper({ value, onDecrease, onIncrease }) {
   )
 }
 
-function ProductCard({ product, isFavorite, onOpen, onToggleFavorite, onAddToCart }) {
+function ProductCard({ product, isFavorite, onOpen, onToggleFavorite, onAddToCart, variant, reviewSummary }) {
+  const rating = getProductAverageRating(product, reviewSummary)
+  const reviewCount = getProductReviewCount(product, reviewSummary)
+
+  if (variant === 'feed') {
+    return (
+      <article className="product-card product-card--feed">
+        <button className="product-card__media product-card__media--feed" type="button" onClick={() => onOpen(product)}>
+          <ProductImage product={product} />
+        </button>
+
+        <button
+          className={`product-card__favorite ${isFavorite ? 'active' : ''}`}
+          type="button"
+          onClick={() => onToggleFavorite(product)}
+          aria-label={isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'}
+        >
+          {isFavorite ? '♥' : '♡'}
+        </button>
+
+        <div className="product-card__body product-card__body--feed">
+          <strong className="product-card__price">{formatPrice(getProductPrice(product))}</strong>
+          <button className="text-link text-link-title product-card__title" type="button" onClick={() => onOpen(product)}>
+            {getProductName(product) || 'Без названия'}
+          </button>
+          <ProductRatingMeta rating={rating} reviewCount={reviewCount} compact />
+        </div>
+      </article>
+    )
+  }
+
   return (
     <article className="surface-card product-card">
       <button className="product-card__media" type="button" onClick={() => onOpen(product)}>
@@ -99,6 +143,7 @@ function ProductCard({ product, isFavorite, onOpen, onToggleFavorite, onAddToCar
         <button className="text-link text-link-title" type="button" onClick={() => onOpen(product)}>
           {getProductName(product) || 'Без названия'}
         </button>
+        <ProductRatingMeta rating={rating} reviewCount={reviewCount} />
         <p>{shortText(getProductDescription(product), 110) || 'Описание пока не добавлено.'}</p>
       </div>
 
@@ -119,6 +164,85 @@ function ProductCard({ product, isFavorite, onOpen, onToggleFavorite, onAddToCar
       </div>
     </article>
   )
+}
+
+function ProductRatingMeta({ rating, reviewCount, compact = false }) {
+  if (!rating && !reviewCount) {
+    return null
+  }
+
+  return (
+    <span className={`product-card__rating ${compact ? 'product-card__rating--compact' : ''}`}>
+      {rating ? (
+        <span className="product-card__rating-score" aria-label={`Рейтинг ${formatRatingValue(rating)}`}>
+          <span aria-hidden="true">★</span>
+          <strong>{formatRatingValue(rating)}</strong>
+        </span>
+      ) : null}
+      {reviewCount ? <span className="product-card__review-count">{reviewCount} {pluralizeReviews(reviewCount)}</span> : null}
+    </span>
+  )
+}
+
+function getProductAverageRating(product, summary) {
+  const value = parseRating(
+    summary?.average_rating ??
+      summary?.averageRating ??
+      product?.average_rating ??
+      product?.averageRating ??
+      product?.rating,
+  )
+
+  return value > 0 ? value : 0
+}
+
+function getProductReviewCount(product, summary) {
+  const value = Number.parseInt(
+    toText(
+      summary?.rating_count ??
+        summary?.ratingCount ??
+        summary?.reviews_count ??
+        summary?.reviewsCount ??
+        product?.rating_count ??
+        product?.ratingCount ??
+        product?.reviews_count ??
+        product?.reviewsCount ??
+        product?.review_count ??
+        product?.reviewCount,
+    ),
+    10,
+  )
+
+  return Number.isInteger(value) && value > 0 ? value : 0
+}
+
+function parseRating(value) {
+  const parsed = Number.parseFloat(toText(value).replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function formatRatingValue(value) {
+  const normalized = Math.round(value * 10) / 10
+  return Number.isInteger(normalized) ? `${normalized}` : normalized.toFixed(1)
+}
+
+function pluralizeReviews(count) {
+  const value = Math.abs(count) % 100
+  const last = value % 10
+
+  if (value > 10 && value < 20) {
+    return 'отзывов'
+  }
+
+  if (last === 1) {
+    return 'отзыв'
+  }
+
+  if (last >= 2 && last <= 4) {
+    return 'отзыва'
+  }
+
+  return 'отзывов'
 }
 
 function ProductImage({ product, large = false }) {

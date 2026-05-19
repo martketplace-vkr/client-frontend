@@ -5,4 +5,3 @@ export const navItems = [
   { path: '/cart', label: 'Корзина', page: 'cart' },
   { path: '/account', label: 'Профиль', page: 'account' },
 ]
-

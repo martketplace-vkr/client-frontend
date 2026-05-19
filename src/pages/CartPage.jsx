@@ -1,10 +1,8 @@
 import {
   formatPrice,
-  getCategoryId,
   getProductDescription,
   getProductId,
   getProductName,
-  getStockCount,
   resolveProductImage,
   shortText,
 } from '../helpers'
@@ -14,11 +12,12 @@ export function CartPage({
   items,
   total,
   totalCount,
-  isAuthorized,
-  addressCount,
+  allSelected,
   checkoutBusy,
   onOpenProduct,
   onQuantityChange,
+  onToggleItemSelected,
+  onToggleAllSelected,
   onRemove,
   onClearCart,
   onCheckout,
@@ -28,81 +27,106 @@ export function CartPage({
       <section className="surface-card section-block">
         <div className="section-head">
           <div>
-            <span className="eyebrow">корзина</span>
-            <h1>Проверьте товары перед оформлением</h1>
           </div>
-          <button className="button button-ghost" type="button" onClick={onClearCart} disabled={items.length === 0}>
-            Очистить корзину
-          </button>
+          <div className="cart-section-actions">
+            <label className="cart-select-all">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                disabled={items.length === 0}
+                onChange={(event) => onToggleAllSelected(event.target.checked)}
+              />
+              <span>Выбрать все</span>
+            </label>
+            <button className="button button-ghost" type="button" onClick={onClearCart} disabled={items.length === 0}>
+              Очистить корзину
+            </button>
+          </div>
         </div>
 
         <div className="cart-list">
           {items.length === 0 ? (
             <div className="empty-panel large-empty">Корзина пуста. Добавьте товары из каталога.</div>
           ) : (
-            items.map((item) => (
-              <article key={getProductId(item.snapshot)} className="cart-item">
-                <button className="cart-item__media" type="button" onClick={() => onOpenProduct(item.snapshot)}>
-                  {resolveProductImage(item.snapshot) ? (
-                    <img src={resolveProductImage(item.snapshot)} alt={getProductName(item.snapshot)} />
-                  ) : (
-                    <div className="image-fallback">{getProductName(item.snapshot).slice(0, 1) || '?'}</div>
-                  )}
-                </button>
+            items.map((item) => {
+              const productId = getProductId(item.snapshot)
+              const productName = getProductName(item.snapshot) || 'Без названия'
 
-                <div className="cart-item__copy">
-                  <button className="text-link" type="button" onClick={() => onOpenProduct(item.snapshot)}>
-                    {getProductName(item.snapshot) || 'Без названия'}
+              return (
+                <article key={productId} className={`cart-item${item.selected ? '' : ' cart-item--muted'}`}>
+                  <label className="cart-item__select">
+                    <input
+                      type="checkbox"
+                      checked={item.selected}
+                      onChange={(event) => onToggleItemSelected(productId, event.target.checked)}
+                      aria-label={`Выбрать ${productName} для заказа`}
+                    />
+                  </label>
+                  <button className="cart-item__media" type="button" onClick={() => onOpenProduct(item.snapshot)}>
+                    {resolveProductImage(item.snapshot) ? (
+                      <img src={resolveProductImage(item.snapshot)} alt={productName} />
+                    ) : (
+                      <div className="image-fallback">{productName.slice(0, 1) || '?'}</div>
+                    )}
                   </button>
-                  <p>{shortText(getProductDescription(item.snapshot), 140) || 'Описание отсутствует.'}</p>
-                  <div className="meta-row">
-                    <span className="meta-chip">В наличии {getStockCount(item.snapshot) || '0'}</span>
-                    <span className="meta-chip">Категория {getCategoryId(item.snapshot) || 'не указана'}</span>
+
+                  <div className="cart-item__copy">
+                    <button className="text-link" type="button" onClick={() => onOpenProduct(item.snapshot)}>
+                      {productName}
+                    </button>
+                    <p>{shortText(getProductDescription(item.snapshot), 140) || 'Описание отсутствует.'}</p>
                   </div>
-                </div>
 
-                <div className="cart-item__controls">
-                  <QuantityStepper
-                    value={item.quantity}
-                    onDecrease={() => onQuantityChange(getProductId(item.snapshot), item.quantity - 1)}
-                    onIncrease={() => onQuantityChange(getProductId(item.snapshot), item.quantity + 1)}
-                  />
-                  <strong>{formatPrice(item.lineTotal)}</strong>
-                  <button className="button button-ghost" type="button" onClick={() => onRemove(getProductId(item.snapshot))}>
-                    Удалить
-                  </button>
-                </div>
-              </article>
-            ))
+                  <div className="cart-item__controls">
+                    <QuantityStepper
+                      value={item.quantity}
+                      onDecrease={() => onQuantityChange(getProductId(item.snapshot), item.quantity - 1)}
+                      onIncrease={() => onQuantityChange(getProductId(item.snapshot), item.quantity + 1)}
+                    />
+                    <strong>{formatPrice(item.lineTotal)}</strong>
+                    <button
+                      className="icon-button cart-remove-button"
+                      type="button"
+                      onClick={() => onRemove(productId)}
+                      aria-label={`Удалить ${productName}`}
+                      title="Удалить"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                </article>
+              )
+            })
           )}
         </div>
       </section>
 
       <aside className="surface-card checkout-card">
-        <span className="eyebrow">итого</span>
         <h2>{formatPrice(total)}</h2>
         <div className="checkout-card__rows">
           <div>
-            <span>Позиции</span>
+            <span>Выбрано товаров</span>
             <strong>{totalCount}</strong>
           </div>
-          <div>
-            <span>Статус аккаунта</span>
-            <strong>{isAuthorized ? 'Вход выполнен' : 'Гость'}</strong>
-          </div>
-          <div>
-            <span>Сохраненные адреса</span>
-            <strong>{addressCount}</strong>
-          </div>
+
         </div>
 
-        <button className="button button-primary wide-button" type="button" onClick={onCheckout} disabled={checkoutBusy}>
-          {checkoutBusy ? 'Оформляем...' : 'Перейти к оформлению'}
+        <button className="button button-primary wide-button" type="button" onClick={onCheckout} disabled={checkoutBusy || totalCount === 0}>
+          {checkoutBusy ? 'Оформляем...' : totalCount === 0 ? 'Выберите товары' : 'Перейти к оформлению'}
         </button>
-        <p className="checkout-note">
-          Checkout отправит заказ в gateway и запустит backend-флоу оплаты.
-        </p>
       </aside>
     </div>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+      <path d="M3 6h18" />
+      <path d="M8 6V4.5A1.5 1.5 0 0 1 9.5 3h5A1.5 1.5 0 0 1 16 4.5V6" />
+      <path d="M19 6l-.9 13.1A2 2 0 0 1 16.1 21H7.9a2 2 0 0 1-2-1.9L5 6" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
   )
 }

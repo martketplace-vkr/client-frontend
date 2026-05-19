@@ -47,6 +47,7 @@ export function useStorefrontController() {
   const [categories, setCategories] = useState([])
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [products, setProducts] = useState([])
+  const [productsNextPageToken, setProductsNextPageToken] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [addresses, setAddresses] = useState([])
   const [orders, setOrders] = useState([])
@@ -56,12 +57,22 @@ export function useStorefrontController() {
   const [topUps, setTopUps] = useState([])
   const [topUpForm, setTopUpForm] = useState({ amount: '10.000000' })
   const [withdrawalForm, setWithdrawalForm] = useState({ amount: '', destination: '' })
+  const [productReviews, setProductReviews] = useState([])
+  const [productReviewSummary, setProductReviewSummary] = useState(null)
+  const [productReviewSummaries, setProductReviewSummaries] = useState({})
+  const [myProductReviews, setMyProductReviews] = useState({})
+  const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '', imageUrls: [] })
+  const [reportReviewId, setReportReviewId] = useState('')
+  const [reportForm, setReportForm] = useState({ reason: '', details: '' })
   const [search, setSearch] = useState('')
   const [busyKeys, setBusyKeys] = useState({})
   const [toasts, setToasts] = useState([])
   const [authDialogOpen, setAuthDialogOpen] = useState(false)
   const [postAuthPath, setPostAuthPath] = useState('')
   const [cartItems, setCartItems] = useState(() => readStoredCollection(CART_KEY))
+  const [selectedCartIds, setSelectedCartIds] = useState(() =>
+    cartItems.map((item) => getProductId(item.snapshot)).filter(Boolean),
+  )
   const [favoriteItems, setFavoriteItems] = useState(() => readStoredCollection(FAVORITES_KEY))
   const [recentItems, setRecentItems] = useState(() => readStoredCollection(RECENT_KEY))
   const toastIdRef = useRef(0)
@@ -71,18 +82,23 @@ export function useStorefrontController() {
   const categoryOptions = flattenCategories(categories)
   const favoriteIds = favoriteItems.map((item) => getProductId(item)).filter(Boolean)
   const visibleProducts = products.filter((product) => productMatchesQuery(product, deferredSearch))
+  const homeProducts = products
   const featuredProducts = visibleProducts.slice(0, 8)
-  const latestProducts = visibleProducts.slice(0, 12)
-  const popularCategories = categoryOptions.slice(0, 8)
   const spotlightProduct =
     route.page === 'product'
       ? getProductId(selectedProduct) === route.productId
         ? selectedProduct
         : null
       : selectedProduct || visibleProducts[0] || null
-  const cartTotal = getCartTotal(cartItems)
-  const cartCount = getCartCount(cartItems)
-  const cartLines = buildCartLines(cartItems)
+  const selectedCartIdSet = new Set(selectedCartIds)
+  const selectedCartItems = cartItems.filter((item) => selectedCartIdSet.has(getProductId(item.snapshot)))
+  const cartTotal = getCartTotal(selectedCartItems)
+  const cartCount = getCartCount(selectedCartItems)
+  const cartLines = buildCartLines(cartItems).map((item) => ({
+    ...item,
+    selected: selectedCartIdSet.has(getProductId(item.snapshot)),
+  }))
+  const allCartItemsSelected = cartItems.length > 0 && cartItems.every((item) => selectedCartIdSet.has(getProductId(item.snapshot)))
   const hasPrivateData = isAuthorized && sessionStatus === 'active'
 
   const handleBootstrapEffect = useEffectEvent(() => {
@@ -169,6 +185,12 @@ export function useStorefrontController() {
   }, [cartItems])
 
   useEffect(() => {
+    const availableIds = new Set(cartItems.map((item) => getProductId(item.snapshot)).filter(Boolean))
+
+    setSelectedCartIds((current) => current.filter((productId) => availableIds.has(productId)))
+  }, [cartItems])
+
+  useEffect(() => {
     writeStoredCollection(FAVORITES_KEY, favoriteItems)
   }, [favoriteItems])
 
@@ -243,29 +265,64 @@ export function useStorefrontController() {
     }
   }
 
-  async function loadProducts(categoryId = '') {
-    setBusy('products', true)
+  async function loadProducts(categoryId = '', { append = false } = {}) {
+    const pageToken = append ? productsNextPageToken : ''
+    if (append && !pageToken) {
+      return
+    }
+
+    const busyKey = append ? 'productsMore' : 'products'
+    setBusy(busyKey, true)
+    if (!append) {
+      setProductsNextPageToken('')
+    }
 
     try {
-      const params = new URLSearchParams({ page_size: '48' })
+      const params = new URLSearchParams()
       if (toText(categoryId)) {
         params.set('category_id', toText(categoryId))
       }
+      if (pageToken) {
+        params.set('page_token', pageToken)
+      }
 
-      const response = await apiRequest(`/api/v1/catalog/products?${params.toString()}`)
+      const query = params.toString()
+      const response = await apiRequest(`/api/v1/catalog/products${query ? `?${query}` : ''}`)
       const nextProducts = response.products || []
+      const rawNextPageToken = response.nextPageToken ?? response.next_page_token ?? ''
+      const nextPageToken = rawNextPageToken === 0 ? '' : toText(rawNextPageToken)
 
       startTransition(() => {
-        setProducts(nextProducts)
+        setProducts((current) => {
+          if (!append) {
+            return nextProducts
+          }
+
+          const seenIds = new Set(current.map((product) => getProductId(product)).filter(Boolean))
+          const uniqueProducts = nextProducts.filter((product) => {
+            const productId = getProductId(product)
+            if (!productId || seenIds.has(productId)) {
+              return false
+            }
+
+            seenIds.add(productId)
+            return true
+          })
+
+          return [...current, ...uniqueProducts]
+        })
+        setProductsNextPageToken(nextPageToken)
         setSelectedProduct((current) => {
           const currentId = getProductId(current)
-          return nextProducts.find((product) => getProductId(product) === currentId) || current || nextProducts[0] || null
+          const availableProducts = append ? [...products, ...nextProducts] : nextProducts
+          return availableProducts.find((product) => getProductId(product) === currentId) || current || availableProducts[0] || null
         })
       })
+      void loadProductReviewSummaries(nextProducts)
     } catch (error) {
       handleError(error)
     } finally {
-      setBusy('products', false)
+      setBusy(busyKey, false)
     }
   }
 
@@ -279,6 +336,8 @@ export function useStorefrontController() {
       startTransition(() => {
         setSelectedProduct(nextProduct)
       })
+
+      await loadProductReviews(productId)
 
       if (rememberView && nextProduct) {
         rememberProduct(nextProduct)
@@ -331,9 +390,11 @@ export function useStorefrontController() {
       apiRequest('/api/v1/balance/deposit-addresses', { token }),
     ])
 
+    const nextOrders = ordersResult.status === 'fulfilled' ? ordersResult.value.orders || [] : null
+
     startTransition(() => {
-      if (ordersResult.status === 'fulfilled') {
-        setOrders(ordersResult.value.orders || [])
+      if (nextOrders) {
+        setOrders(nextOrders)
       }
       if (walletResult.status === 'fulfilled') {
         setWallet(walletResult.value.wallet || null)
@@ -352,6 +413,10 @@ export function useStorefrontController() {
     const rejected = [ordersResult, walletResult, transactionsResult, topUpsResult, depositAddressesResult].find((result) => result.status === 'rejected')
     if (rejected && !silent) {
       handleError(rejected.reason)
+    }
+
+    if (nextOrders) {
+      void loadMyOrderReviews(nextOrders, token)
     }
 
     setBusy('dashboard', false)
@@ -750,6 +815,268 @@ export function useStorefrontController() {
     }
   }
 
+  async function loadProductReviews(productId) {
+    const normalizedProductId = toText(productId).trim()
+    if (!normalizedProductId) {
+      startTransition(() => {
+        setProductReviews([])
+        setProductReviewSummary(null)
+      })
+      return
+    }
+
+    setBusy('reviews', true)
+
+    try {
+      const response = await apiRequest(`/api/v1/catalog/products/${encodeURIComponent(normalizedProductId)}/reviews`)
+      startTransition(() => {
+        setProductReviews(response.reviews || [])
+        setProductReviewSummary(response.summary || null)
+        setProductReviewSummaries((current) => ({ ...current, [normalizedProductId]: response.summary || null }))
+      })
+    } catch (error) {
+      handleError(error)
+    } finally {
+      setBusy('reviews', false)
+    }
+  }
+
+  async function loadProductReviewSummaries(productList) {
+    const productIds = Array.from(
+      new Set((productList || []).map((product) => getProductId(product)).filter(Boolean)),
+    )
+
+    if (productIds.length === 0) {
+      return
+    }
+
+    try {
+      const results = await Promise.allSettled(
+        productIds.map(async (productId) => {
+          const response = await apiRequest(`/api/v1/catalog/products/${encodeURIComponent(productId)}/reviews`)
+          return [productId, response.summary || null]
+        }),
+      )
+
+      const nextSummaries = {}
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const [productId, summary] = result.value
+          nextSummaries[productId] = summary
+        }
+      }
+
+      if (Object.keys(nextSummaries).length > 0) {
+        startTransition(() => {
+          setProductReviewSummaries((current) => ({ ...current, ...nextSummaries }))
+        })
+      }
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  async function loadMyOrderReviews(orderList, token = accessToken) {
+    if (!token) {
+      return
+    }
+
+    const productIds = Array.from(
+      new Set((orderList || []).map((order) => toText(order?.product?.productId ?? order?.product?.product_id ?? order?.productId ?? order?.product_id)).filter(Boolean)),
+    )
+
+    if (productIds.length === 0) {
+      return
+    }
+
+    try {
+      const results = await Promise.allSettled(
+        productIds.map(async (productId) => {
+          const response = await apiRequest(`/api/v1/catalog/products/${encodeURIComponent(productId)}/reviews/my`, { token })
+          return [productId, response.review || null]
+        }),
+      )
+
+      const nextReviews = {}
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const [productId, review] = result.value
+          if (review) {
+            nextReviews[productId] = review
+          }
+        }
+      }
+
+      startTransition(() => {
+        setMyProductReviews(nextReviews)
+      })
+    } catch (error) {
+      handleError(error)
+    }
+  }
+
+  function handleReviewFormChange(nextValue) {
+    startTransition(() => {
+      setReviewForm((current) => ({ ...current, ...nextValue }))
+    })
+  }
+
+  async function handleReviewImageUpload(event) {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+
+    if (files.length === 0) {
+      return
+    }
+
+    setBusy('reviewImages', true)
+
+    try {
+      const token = await ensureAuthorized()
+      const uploaded = []
+      for (const file of files) {
+        const response = await uploadMediaFile(file, { token, directory: 'reviews' })
+        const fileUrl = toText(response?.fileUrl ?? response?.file_url).trim()
+        if (fileUrl) {
+          uploaded.push(fileUrl)
+        }
+      }
+
+      if (uploaded.length === 0) {
+        throw new Error('Media service не вернул ссылки на фото.')
+      }
+
+      startTransition(() => {
+        setReviewForm((current) => ({ ...current, imageUrls: [...current.imageUrls, ...uploaded].slice(0, 6) }))
+      })
+      notify('Фото добавлены к отзыву.', 'success')
+    } catch (error) {
+      handleError(error)
+    } finally {
+      setBusy('reviewImages', false)
+    }
+  }
+
+  function handleRemoveReviewImage(imageUrl) {
+    startTransition(() => {
+      setReviewForm((current) => ({
+        ...current,
+        imageUrls: current.imageUrls.filter((url) => url !== imageUrl),
+      }))
+    })
+  }
+
+  async function handleReviewSubmit(event, targetProductId = '') {
+    event.preventDefault()
+
+    const productId = targetProductId || getProductId(spotlightProduct)
+    if (!productId) {
+      notify('Не удалось определить товар для отзыва.', 'warning')
+      return false
+    }
+
+    setBusy('reviewSubmit', true)
+
+    try {
+      const token = await ensureAuthorized()
+      const response = await apiRequest(`/api/v1/catalog/products/${encodeURIComponent(productId)}/reviews`, {
+        method: 'POST',
+        token,
+        body: {
+          rating: Number.parseInt(reviewForm.rating, 10) || 5,
+          comment: reviewForm.comment.trim(),
+          image_urls: reviewForm.imageUrls,
+        },
+      })
+
+      startTransition(() => {
+        setProductReviews((current) => [response.review, ...current.filter((review) => toText(review?.id) !== toText(response.review?.id))].filter(Boolean))
+        setProductReviewSummary(response.summary || productReviewSummary)
+        setProductReviewSummaries((current) => ({ ...current, [productId]: response.summary || current[productId] || null }))
+        setMyProductReviews((current) => ({ ...current, [productId]: response.review || current[productId] || null }))
+        setReviewForm({ rating: 5, comment: '', imageUrls: [] })
+      })
+      notify('Отзыв опубликован.', 'success')
+      await loadProductReviews(productId)
+      return true
+    } catch (error) {
+      handleError(error)
+      return false
+    } finally {
+      setBusy('reviewSubmit', false)
+    }
+  }
+
+  async function handleReviewVote(reviewId, vote) {
+    setBusy(`reviewVote-${reviewId}`, true)
+
+    try {
+      const token = await ensureAuthorized()
+      const response = await apiRequest(`/api/v1/reviews/${encodeURIComponent(reviewId)}/vote`, {
+        method: 'PUT',
+        token,
+        body: { vote },
+      })
+
+      startTransition(() => {
+        setProductReviews((current) =>
+          current.map((review) => (toText(review?.id) === toText(reviewId) ? response.review || review : review)),
+        )
+      })
+    } catch (error) {
+      handleError(error)
+    } finally {
+      setBusy(`reviewVote-${reviewId}`, false)
+    }
+  }
+
+  function handleToggleReportForm(reviewId) {
+    startTransition(() => {
+      const nextReviewId = reportReviewId === toText(reviewId) ? '' : toText(reviewId)
+      setReportReviewId(nextReviewId)
+      setReportForm({ reason: '', details: '' })
+    })
+  }
+
+  function handleReportFormChange(nextValue) {
+    startTransition(() => {
+      setReportForm((current) => ({ ...current, ...nextValue }))
+    })
+  }
+
+  async function handleReportSubmit(event, reviewId) {
+    event.preventDefault()
+
+    if (!reportForm.reason) {
+      notify('Выберите причину жалобы.', 'warning')
+      return
+    }
+
+    setBusy(`reviewReport-${reviewId}`, true)
+
+    try {
+      const token = await ensureAuthorized()
+      await apiRequest(`/api/v1/reviews/${encodeURIComponent(reviewId)}/reports`, {
+        method: 'POST',
+        token,
+        body: {
+          reason: reportForm.reason,
+          details: reportForm.details.trim(),
+        },
+      })
+
+      startTransition(() => {
+        setReportReviewId('')
+        setReportForm({ reason: '', details: '' })
+      })
+      notify('Жалоба отправлена.', 'success')
+    } catch (error) {
+      handleError(error)
+    } finally {
+      setBusy(`reviewReport-${reviewId}`, false)
+    }
+  }
+
   async function handleCancelOrder(orderId) {
     setBusy(`order-${orderId}`, true)
 
@@ -781,6 +1108,14 @@ export function useStorefrontController() {
       setRoute(readRoute())
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function openHome() {
+    startTransition(() => {
+      setSelectedCategoryId('')
+      setSearch('')
+    })
+    navigate('/')
   }
 
   function openAuthDialog(mode = 'login') {
@@ -878,6 +1213,7 @@ export function useStorefrontController() {
 
       return [...current, { id: productId, quantity: normalizeQuantity(quantity), snapshot }]
     })
+    setSelectedCartIds((current) => (current.includes(productId) ? current : [...current, productId]))
     notify('Товар добавлен в корзину.', 'success')
   }
 
@@ -886,6 +1222,7 @@ export function useStorefrontController() {
 
     if (nextQuantity <= 0) {
       setCartItems((current) => current.filter((item) => getProductId(item.snapshot) !== productId))
+      setSelectedCartIds((current) => current.filter((currentId) => currentId !== productId))
       notify('Товар удален из корзины.', 'info')
       return
     }
@@ -899,17 +1236,43 @@ export function useStorefrontController() {
 
   function removeFromCart(productId) {
     setCartItems((current) => current.filter((item) => getProductId(item.snapshot) !== productId))
+    setSelectedCartIds((current) => current.filter((currentId) => currentId !== productId))
     notify('Товар удален из корзины.', 'info')
   }
 
   function clearCart() {
     setCartItems([])
+    setSelectedCartIds([])
     notify('Корзина очищена.', 'info')
+  }
+
+  function toggleCartItemSelected(productId, checked) {
+    setSelectedCartIds((current) => {
+      if (checked) {
+        return current.includes(productId) ? current : [...current, productId]
+      }
+
+      return current.filter((currentId) => currentId !== productId)
+    })
+  }
+
+  function toggleAllCartSelected(checked) {
+    if (!checked) {
+      setSelectedCartIds([])
+      return
+    }
+
+    setSelectedCartIds(cartItems.map((item) => getProductId(item.snapshot)).filter(Boolean))
   }
 
   async function handleCheckout() {
     if (cartItems.length === 0) {
       notify('Корзина пока пустая.', 'warning')
+      return
+    }
+
+    if (selectedCartItems.length === 0) {
+      notify('Выберите товары для оформления.', 'warning')
       return
     }
 
@@ -921,7 +1284,9 @@ export function useStorefrontController() {
     setBusy('checkout', true)
 
     try {
-      const productIds = cartItems.flatMap((item) => {
+      const token = await ensureAuthorized()
+
+      const productIds = selectedCartItems.flatMap((item) => {
         const productId = Number.parseInt(getProductId(item.snapshot), 10)
         if (!Number.isInteger(productId) || productId <= 0) {
           return []
@@ -936,6 +1301,7 @@ export function useStorefrontController() {
 
       const response = await authedRequest('/api/v1/orders/checkout', {
         method: 'POST',
+        token,
         body: {
           checkout_id: `web-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           product_ids: productIds,
@@ -945,11 +1311,12 @@ export function useStorefrontController() {
 
       startTransition(() => {
         setOrders((current) => [...(response.orders || []), ...current])
-        setCartItems([])
+        setCartItems((current) => current.filter((item) => !selectedCartIdSet.has(getProductId(item.snapshot))))
+        setSelectedCartIds([])
       })
       notify('Заказ создан. Оплату можно проверить в кошельке.', 'success')
       navigate('/wallet')
-      await loadPrivateDashboard(accessToken, true)
+      await loadPrivateDashboard(token, true)
     } catch (error) {
       handleError(error)
     } finally {
@@ -967,6 +1334,11 @@ export function useStorefrontController() {
   }
 
   function handleNavigationItem(item) {
+    if (item.page === 'home') {
+      openHome()
+      return
+    }
+
     if (['account', 'wallet'].includes(item.page) && !isAuthorized) {
       requestProtectedNavigation(item.path, ACCOUNT_ACCESS_MESSAGE)
       return
@@ -977,19 +1349,19 @@ export function useStorefrontController() {
 
   const pageProps = {
     home: {
-      featuredProducts,
-      latestProducts,
-      popularCategories,
+      homeProducts,
       favoriteIds,
       busyProducts: busyKeys.products,
-      onCategorySelect: handleCategorySelect,
+      hasMoreProducts: Boolean(productsNextPageToken),
+      loadingMoreProducts: busyKeys.productsMore,
       onOpenProduct: goToProduct,
       onToggleFavorite: toggleFavorite,
-      onAddToCart: addToCart,
-      onGoCatalog: () => navigate('/catalog'),
+      onLoadMoreProducts: () => loadProducts('', { append: true }),
+      reviewSummaries: productReviewSummaries,
     },
     catalog: {
-      categories: categoryOptions,
+      categoryTree: categories,
+      categoryOptions,
       selectedCategoryId,
       onCategoryChange: handleCategorySelect,
       search,
@@ -997,10 +1369,14 @@ export function useStorefrontController() {
       visibleProducts,
       favoriteIds,
       busyProducts: busyKeys.products,
+      hasMoreProducts: Boolean(productsNextPageToken),
+      loadingMoreProducts: busyKeys.productsMore,
       onReload: () => loadProducts(selectedCategoryId),
+      onLoadMoreProducts: () => loadProducts(selectedCategoryId, { append: true }),
       onOpenProduct: goToProduct,
       onToggleFavorite: toggleFavorite,
       onAddToCart: addToCart,
+      reviewSummaries: productReviewSummaries,
       onResetFilters: () => {
         startTransition(() => {
           setSelectedCategoryId('')
@@ -1019,6 +1395,17 @@ export function useStorefrontController() {
         .filter((product) => getProductId(product) !== getProductId(spotlightProduct))
         .slice(0, 4),
       onOpenProduct: goToProduct,
+      isAuthorized,
+      reviews: productReviews,
+      reviewSummary: productReviewSummary,
+      reportReviewId,
+      reportForm,
+      busyKeys,
+      onReviewVote: handleReviewVote,
+      onToggleReportForm: handleToggleReportForm,
+      onReportFormChange: handleReportFormChange,
+      onReportSubmit: handleReportSubmit,
+      onRequireAuth: () => requestProtectedNavigation(`/product/${getProductId(spotlightProduct)}`, 'Войдите, чтобы оставить отзыв.'),
     },
     favorites: {
       items: favoriteItems,
@@ -1026,16 +1413,20 @@ export function useStorefrontController() {
       onOpenProduct: goToProduct,
       onToggleFavorite: toggleFavorite,
       onAddToCart: addToCart,
+      reviewSummaries: productReviewSummaries,
     },
     cart: {
       items: cartLines,
       total: cartTotal,
       totalCount: cartCount,
+      allSelected: allCartItemsSelected,
       isAuthorized,
       addressCount: isAuthorized ? addresses.length : 0,
       checkoutBusy: busyKeys.checkout,
       onOpenProduct: goToProduct,
       onQuantityChange: updateCartQuantity,
+      onToggleItemSelected: toggleCartItemSelected,
+      onToggleAllSelected: toggleAllCartSelected,
       onRemove: removeFromCart,
       onClearCart: clearCart,
       onCheckout: handleCheckout,
@@ -1052,6 +1443,8 @@ export function useStorefrontController() {
       transactions,
       topUps,
       favoriteItems,
+      reviewSummaries: productReviewSummaries,
+      myProductReviews,
       busyKeys,
       cartCount,
       favoriteCount: favoriteItems.length,
@@ -1068,6 +1461,11 @@ export function useStorefrontController() {
       onToggleFavorite: toggleFavorite,
       onAddToCart: addToCart,
       hasPrivateData,
+      reviewForm,
+      onReviewFormChange: handleReviewFormChange,
+      onReviewImageUpload: handleReviewImageUpload,
+      onRemoveReviewImage: handleRemoveReviewImage,
+      onReviewSubmit: handleReviewSubmit,
     },
     wallet: {
       isAuthorized,
@@ -1089,7 +1487,7 @@ export function useStorefrontController() {
       hasPrivateData,
     },
     notFound: {
-      onGoHome: () => navigate('/'),
+      onGoHome: openHome,
     },
   }
 
@@ -1102,7 +1500,7 @@ export function useStorefrontController() {
       search,
       onSearchChange: setSearch,
       onSearchSubmit: handleSearchSubmit,
-      onOpenHome: () => navigate('/'),
+      onOpenHome: openHome,
       onOpenFavorites: () => navigate('/favorites'),
       onOpenCart: () => navigate('/cart'),
       onOpenAccount: openAccount,

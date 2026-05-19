@@ -1,15 +1,11 @@
 import { getProductId } from '../helpers'
 import { ProductGrid, ProductMiniRail } from '../components/storefront/ProductSections'
 
-export function FavoritesPage({ items, recentItems, onOpenProduct, onToggleFavorite, onAddToCart }) {
+export function FavoritesPage({ items, recentItems, onOpenProduct, onToggleFavorite, onAddToCart, reviewSummaries }) {
   return (
     <div className="page-content">
       <section className="surface-card section-block">
         <div className="section-head">
-          <div>
-            <span className="eyebrow">избранное</span>
-            <h1>Товары, к которым хочется вернуться</h1>
-          </div>
         </div>
 
         <ProductGrid
@@ -18,6 +14,7 @@ export function FavoritesPage({ items, recentItems, onOpenProduct, onToggleFavor
           onOpenProduct={onOpenProduct}
           onToggleFavorite={onToggleFavorite}
           onAddToCart={onAddToCart}
+          reviewSummaries={reviewSummaries}
           emptyMessage="Пока пусто. Добавьте товары из каталога или карточки товара."
         />
       </section>
@@ -25,7 +22,6 @@ export function FavoritesPage({ items, recentItems, onOpenProduct, onToggleFavor
       <section className="section-block">
         <div className="section-head">
           <div>
-            <span className="eyebrow">недавние просмотры</span>
             <h2>Недавно открывали</h2>
           </div>
         </div>
