@@ -14,6 +14,7 @@ export function WalletPage({
   isAuthorized,
   selectedCurrency,
   wallet,
+  depositAddresses,
   transactions,
   topUps,
   busyKeys,
@@ -22,8 +23,9 @@ export function WalletPage({
   onBackToWallets,
   hasPrivateData,
 }) {
-  const usdtWallet = buildUsdtWallet(wallet, topUps)
-  const wallets = [RUB_WALLET, usdtWallet]
+  const rubWallet = buildRubWallet(wallet)
+  const usdtWallet = buildUsdtWallet(wallet, topUps, depositAddresses)
+  const wallets = [rubWallet, usdtWallet]
   const selectedWallet = wallets.find((item) => item.currency === selectedCurrency)
 
   if (selectedWallet) {
@@ -176,16 +178,33 @@ function WalletIcon({ wallet, compact = false }) {
   )
 }
 
-function buildUsdtWallet(wallet, topUps) {
-  const availableAccount = wallet?.accounts?.find((account) => accountType(account).includes('AVAILABLE'))
-  const latestAddress = topUps.find((topUp) => topUp.walletAddress || topUp.wallet_address)
-  const amount = formatMoney(
+function buildRubWallet(wallet) {
+  const availableAccount = findAvailableAccount(wallet, 1000)
+  const amount = formatBalanceAmount(formatMoney(
     {
-      amount: availableAccount?.balance ?? '0.000000',
+      amount: availableAccount?.balance ?? RUB_WALLET.amount,
+      currency_code: availableAccount?.currencyCode ?? availableAccount?.currency_code ?? 1000,
+    },
+    `${RUB_WALLET.amount} RUB`,
+  ).replace(/\s*(RUB|1000)$/, ''))
+
+  return {
+    ...RUB_WALLET,
+    amount,
+  }
+}
+
+function buildUsdtWallet(wallet, topUps = [], depositAddresses = []) {
+  const availableAccount = findAvailableAccount(wallet, 2001)
+  const depositAddress = depositAddresses.find((address) => address.address)
+  const latestAddress = topUps.find((topUp) => topUp.walletAddress || topUp.wallet_address)
+  const amount = formatBalanceAmount(formatMoney(
+    {
+      amount: availableAccount?.balance ?? '0.000',
       currency_code: availableAccount?.currencyCode ?? availableAccount?.currency_code ?? 2001,
     },
-    '0.000000 USDT',
-  ).replace(/\s*USDT$/, '')
+    '0.000 USDT',
+  ).replace(/\s*USDT$/, ''))
 
   return {
     currency: 'usdt',
@@ -195,12 +214,35 @@ function buildUsdtWallet(wallet, topUps) {
     amount,
     fiat: '0.00 RUB',
     tone: 'usdt',
-    address: latestAddress?.walletAddress || latestAddress?.wallet_address || '',
+    address: depositAddress?.address || latestAddress?.walletAddress || latestAddress?.wallet_address || '',
   }
 }
 
 function accountType(account) {
   return toText(account?.accountType ?? account?.account_type)
+}
+
+function accountCurrencyCode(account) {
+  return toText(account?.currencyCode ?? account?.currency_code)
+}
+
+function findAvailableAccount(wallet, currencyCode) {
+  const targetCurrencyCode = toText(currencyCode)
+
+  return wallet?.accounts?.find(
+    (account) => accountCurrencyCode(account) === targetCurrencyCode && accountType(account).includes('AVAILABLE'),
+  )
+}
+
+function formatBalanceAmount(value) {
+  const normalized = toText(value).trim().replace(',', '.')
+  const parsed = Number.parseFloat(normalized)
+
+  if (!Number.isFinite(parsed)) {
+    return toText(value)
+  }
+
+  return parsed.toFixed(2)
 }
 
 function shortAddress(address) {

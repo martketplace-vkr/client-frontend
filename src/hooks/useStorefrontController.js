@@ -6,6 +6,7 @@ import {
   getStoredRefreshToken,
   setStoredAccessToken,
   setStoredRefreshToken,
+  uploadMediaFile,
 } from '../api'
 import {
   emptyAddressForm,
@@ -50,6 +51,7 @@ export function useStorefrontController() {
   const [addresses, setAddresses] = useState([])
   const [orders, setOrders] = useState([])
   const [wallet, setWallet] = useState(null)
+  const [depositAddresses, setDepositAddresses] = useState([])
   const [transactions, setTransactions] = useState([])
   const [topUps, setTopUps] = useState([])
   const [topUpForm, setTopUpForm] = useState({ amount: '10.000000' })
@@ -321,11 +323,12 @@ export function useStorefrontController() {
 
     setBusy('dashboard', true)
 
-    const [ordersResult, walletResult, transactionsResult, topUpsResult] = await Promise.allSettled([
+    const [ordersResult, walletResult, transactionsResult, topUpsResult, depositAddressesResult] = await Promise.allSettled([
       apiRequest('/api/v1/orders', { token }),
       apiRequest('/api/v1/balance/wallet', { token }),
       apiRequest('/api/v1/balance/transactions?currency_code=2001&limit=20&offset=0', { token }),
       apiRequest('/api/v1/balance/top-ups?limit=20&offset=0', { token }),
+      apiRequest('/api/v1/balance/deposit-addresses', { token }),
     ])
 
     startTransition(() => {
@@ -341,9 +344,12 @@ export function useStorefrontController() {
       if (topUpsResult.status === 'fulfilled') {
         setTopUps(topUpsResult.value.topUps || topUpsResult.value.top_ups || [])
       }
+      if (depositAddressesResult.status === 'fulfilled') {
+        setDepositAddresses(depositAddressesResult.value.depositAddresses || depositAddressesResult.value.deposit_addresses || [])
+      }
     })
 
-    const rejected = [ordersResult, walletResult, transactionsResult, topUpsResult].find((result) => result.status === 'rejected')
+    const rejected = [ordersResult, walletResult, transactionsResult, topUpsResult, depositAddressesResult].find((result) => result.status === 'rejected')
     if (rejected && !silent) {
       handleError(rejected.reason)
     }
@@ -407,6 +413,7 @@ export function useStorefrontController() {
     setAddresses([])
     setOrders([])
     setWallet(null)
+    setDepositAddresses([])
     setTransactions([])
     setTopUps([])
   }
@@ -577,7 +584,6 @@ export function useStorefrontController() {
       const response = await authedRequest('/api/v1/users/me', {
         method: 'PATCH',
         body: {
-          email: profileForm.email.trim(),
           first_name: profileForm.firstName.trim(),
           last_name: profileForm.lastName.trim(),
           avatar_url: profileForm.avatarUrl.trim(),
@@ -592,6 +598,36 @@ export function useStorefrontController() {
       handleError(error)
     } finally {
       setBusy('profile', false)
+    }
+  }
+
+  async function handleProfileAvatarUpload(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (!file) {
+      return
+    }
+
+    setBusy('mediaAvatar', true)
+
+    try {
+      const token = await ensureAuthorized()
+      const response = await uploadMediaFile(file, { token, directory: 'avatars/clients' })
+      const fileUrl = toText(response?.fileUrl ?? response?.file_url).trim()
+
+      if (!fileUrl) {
+        throw new Error('Media service не вернул file_url.')
+      }
+
+      startTransition(() => {
+        setProfileForm((current) => ({ ...current, avatarUrl: fileUrl }))
+      })
+      notify('Аватар загружен. Сохраните профиль, чтобы применить ссылку.', 'success')
+    } catch (error) {
+      handleError(error)
+    } finally {
+      setBusy('mediaAvatar', false)
     }
   }
 
@@ -1011,23 +1047,33 @@ export function useStorefrontController() {
       addressForm,
       addresses,
       orders,
+      wallet,
+      depositAddresses,
+      transactions,
+      topUps,
+      favoriteItems,
       busyKeys,
       cartCount,
       favoriteCount: favoriteItems.length,
       onProfileChange: setProfileForm,
       onAddressChange: setAddressForm,
       onProfileSubmit: handleProfileSubmit,
+      onAvatarUpload: handleProfileAvatarUpload,
       onAddressSubmit: handleAddressSubmit,
       onCancelOrder: handleCancelOrder,
       onReloadDashboard: handleReloadDashboard,
       onLogout: handleLogout,
       onReloadAddresses: handleReloadAddresses,
+      onOpenProduct: goToProduct,
+      onToggleFavorite: toggleFavorite,
+      onAddToCart: addToCart,
       hasPrivateData,
     },
     wallet: {
       isAuthorized,
       selectedCurrency: route.walletCurrency || '',
       wallet,
+      depositAddresses,
       transactions,
       topUps,
       topUpForm,

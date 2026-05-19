@@ -15,24 +15,6 @@ export function HomePage({
 }) {
   return (
     <div className="page-content">
-      <section className="hero-banner surface-card surface-card-hero">
-        <div className="hero-banner__copy">
-          <h1>Маркетплейс с привычной логикой покупок и чистым русским интерфейсом.</h1>
-          <p>
-            Главная, каталог, карточка товара, избранное, корзина и профиль уже собраны в единый пользовательский
-            сценарий. Вдохновение взято у крупных маркетплейсов, но интерфейс собран в своем стиле.
-          </p>
-
-          <div className="hero-actions">
-            <button className="button button-primary" type="button" onClick={onGoCatalog}>
-              Перейти в каталог
-            </button>
-            <button className="button button-secondary" type="button" onClick={() => onCategorySelect('')}>
-              Смотреть все категории
-            </button>
-          </div>
-        </div>
-      </section>
 
       <section className="promo-grid">
         {promoCards.map((card) => (
@@ -99,21 +81,6 @@ export function HomePage({
             <p>{card.text}</p>
           </article>
         ))}
-      </section>
-
-      <section className="section-block">
-        <div className="section-head">
-          <div>
-            <span className="eyebrow">новинки</span>
-            <h2>Недавно загруженные товары</h2>
-          </div>
-        </div>
-
-        <ProductMiniRail
-          products={latestProducts}
-          onOpenProduct={onOpenProduct}
-          emptyMessage="Пока нет товаров для нижней витрины."
-        />
       </section>
     </div>
   )

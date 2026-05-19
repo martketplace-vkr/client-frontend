@@ -1,5 +1,6 @@
 const ACCESS_TOKEN_KEY = 'marketplace.gateway.access_token'
 const REFRESH_TOKEN_KEY = 'marketplace.gateway.refresh_token'
+const ACCESS_TOKEN_HEADER = 'x-access-token'
 
 export class ApiError extends Error {
   constructor(message, status = 0, payload = null) {
@@ -42,13 +43,14 @@ export function getApiBaseUrl() {
 
 export async function apiRequest(path, { method = 'GET', body, token } = {}) {
   const headers = {}
+  const resolvedToken = getStoredAccessToken() || token
 
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json'
   }
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
+  if (resolvedToken) {
+    headers.Authorization = `Bearer ${resolvedToken}`
   }
 
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
@@ -76,5 +78,53 @@ export async function apiRequest(path, { method = 'GET', body, token } = {}) {
     )
   }
 
+  syncAccessTokenFromResponse(response)
+
   return payload || {}
+}
+
+export async function uploadMediaFile(file, { token, directory = 'uploads' } = {}) {
+  const formData = new FormData()
+  const resolvedToken = getStoredAccessToken() || token
+  formData.append('file', file)
+
+  if (directory) {
+    formData.append('directory', directory)
+  }
+
+  const headers = {}
+  if (resolvedToken) {
+    headers.Authorization = `Bearer ${resolvedToken}`
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/api/v1/media/upload`, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: formData,
+  })
+
+  const contentType = response.headers.get('content-type') || ''
+  const payload = contentType.includes('application/json')
+    ? await response.json()
+    : { message: await response.text() }
+
+  if (!response.ok) {
+    throw new ApiError(
+      payload?.message || payload?.error || `HTTP ${response.status}`,
+      response.status,
+      payload,
+    )
+  }
+
+  syncAccessTokenFromResponse(response)
+
+  return payload || {}
+}
+
+function syncAccessTokenFromResponse(response) {
+  const accessToken = response.headers.get(ACCESS_TOKEN_HEADER)?.trim()
+  if (accessToken) {
+    setStoredAccessToken(accessToken)
+  }
 }

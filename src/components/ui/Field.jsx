@@ -7,6 +7,7 @@ export function Field({
   rows = 0,
   as = 'input',
   disabled = false,
+  hint = '',
   children,
   ...rest
 }) {
@@ -30,8 +31,9 @@ export function Field({
 
   return (
     <label className="field">
-      <span>{label}</span>
+      <span className="field-label">{label}</span>
       <Component {...controlProps}>{children}</Component>
+      {hint ? <small className="field-hint">{hint}</small> : null}
     </label>
   )
 }

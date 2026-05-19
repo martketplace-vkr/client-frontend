@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react'
 import {
   formatPrice,
   getCategoryId,
   getProductAttributes,
   getProductDescription,
+  getProductImages,
   getProductId,
   getProductName,
   getProductPrice,
@@ -13,7 +15,16 @@ import {
 import { RelatedProductGrid } from '../components/storefront/ProductSections'
 
 export function ProductPage({ product, busy, isFavorite, onBack, onToggleFavorite, onAddToCart, relatedProducts, onOpenProduct }) {
-  const attributes = getProductAttributes(product)
+  const attributeSections = getProductAttributes(product)
+  const images = getProductImages(product)
+  const preferredImage = resolveProductImage(product)
+  const [selectedImageUrl, setSelectedImageUrl] = useState(preferredImage)
+
+  useEffect(() => {
+    setSelectedImageUrl(preferredImage)
+  }, [preferredImage, product])
+
+  const activeImageUrl = selectedImageUrl || preferredImage || toText(images[0]?.url)
 
   return (
     <div className="page-content">
@@ -29,12 +40,32 @@ export function ProductPage({ product, busy, isFavorite, onBack, onToggleFavorit
         <section className="product-layout">
           <div className="surface-card product-gallery">
             <div className="product-gallery__main">
-              {resolveProductImage(product) ? (
-                <img src={resolveProductImage(product)} alt={getProductName(product)} />
+              {activeImageUrl ? (
+                <img src={activeImageUrl} alt={getProductName(product)} />
               ) : (
                 <div className="image-fallback large">{getProductName(product).slice(0, 1) || '?'}</div>
               )}
             </div>
+            {images.length > 1 ? (
+              <div className="product-gallery__thumbs">
+                {images.map((image, index) => {
+                  const imageUrl = toText(image?.url)
+                  const isActive = imageUrl && imageUrl === activeImageUrl
+
+                  return (
+                    <button
+                      key={`${imageUrl}-${index}`}
+                      className={`product-gallery__thumb ${isActive ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => setSelectedImageUrl(imageUrl)}
+                      aria-label={`Открыть изображение ${index + 1}`}
+                    >
+                      <img src={imageUrl} alt={`${getProductName(product)} ${index + 1}`} />
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null}
           </div>
 
           <div className="product-summary">
@@ -76,15 +107,23 @@ export function ProductPage({ product, busy, isFavorite, onBack, onToggleFavorit
 
             <article className="surface-card product-specs">
               <h2>Характеристики</h2>
-              {attributes.length === 0 ? (
+              {attributeSections.length === 0 ? (
                 <div className="empty-panel compact-empty">Характеристики не заполнены.</div>
               ) : (
-                <div className="spec-grid">
-                  {attributes.map((attribute, index) => (
-                    <div key={`${toText(attribute.name)}-${index}`} className="spec-item">
-                      <span>{toText(attribute.name)}</span>
-                      <strong>{toText(attribute.value)}</strong>
-                    </div>
+                <div className="spec-sections">
+                  {attributeSections.map((section, sectionIndex) => (
+                    <section key={`${section.title}-${sectionIndex}`} className="spec-section">
+                      <h3>{toText(section.title)}</h3>
+                      <div className="spec-list">
+                        {(section.attributes || []).map((attribute, index) => (
+                          <div key={`${attribute.name}-${index}`} className="spec-row">
+                            <span className="spec-row__name">{toText(attribute.key ?? attribute.name)}</span>
+                            <span className="spec-row__dots" aria-hidden="true" />
+                            <strong className="spec-row__value">{toText(attribute.value)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
               )}
