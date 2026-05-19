@@ -354,129 +354,131 @@ function OrdersSection({
   }
 
   return (
-    <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
-      <div className="section-head">
-        <div>
-          <h2>История заказов</h2>
+    <>
+      <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
+        <div className="section-head">
+          <div>
+            <h2>История заказов</h2>
+          </div>
         </div>
-      </div>
 
-      <div className="order-history">
-        {orderGroups.length === 0 ? (
-          <div className="empty-panel compact-empty">Заказов пока нет.</div>
-        ) : (
-          orderGroups.map((group) => {
-            const cancellableOrders = group.items.filter(canCancelOrder)
-            const isCancelling = group.items.some((order) => busyKeys[`order-${getOrderId(order)}`])
+        <div className="order-history">
+          {orderGroups.length === 0 ? (
+            <div className="empty-panel compact-empty">Заказов пока нет.</div>
+          ) : (
+            orderGroups.map((group) => {
+              const cancellableOrders = group.items.filter(canCancelOrder)
+              const isCancelling = group.items.some((order) => busyKeys[`order-${getOrderId(order)}`])
 
-            return (
-              <article key={group.key} className="order-card">
-                <div className="order-card__top">
-                  <div className="order-card__title">
-                    <h3>
-                      {getOrderStatusLabel(group.status)} {formatOrderDay(group.createdAt)}
-                    </h3>
-                    <span>{getOrderSubtitle(group)}</span>
-                  </div>
-                  <div className="order-card__meta">
-                    <span className={`order-status-pill status-${normalizeStatus(group.status)}`}>
-                      {getOrderStatusLabel(group.status)}
-                    </span>
-                    <span>{getOrderCode(group)}</span>
-                  </div>
-                </div>
-
-                <div className="order-card__body">
-                  <div className="order-card__summary">
-                    <span>Сумма заказа</span>
-                    <strong>{getOrderGroupTotal(group)}</strong>
-                    <small>{group.items.length} {pluralizeProducts(group.items.length)}</small>
-                    <button
-                      className="button button-ghost button-small"
-                      type="button"
-                      onClick={() => cancellableOrders.forEach((order) => onCancelOrder(getOrderId(order)))}
-                      disabled={!isAuthorized || isCancelling || cancellableOrders.length === 0}
-                    >
-                      {isCancelling ? 'Отменяем...' : 'Отменить заказ'}
-                    </button>
+              return (
+                <article key={group.key} className="order-card">
+                  <div className="order-card__top">
+                    <div className="order-card__title">
+                      <h3>
+                        {getOrderStatusLabel(group.status)} {formatOrderDay(group.createdAt)}
+                      </h3>
+                      <span>{getOrderSubtitle(group)}</span>
+                    </div>
+                    <div className="order-card__meta">
+                      <span className={`order-status-pill status-${normalizeStatus(group.status)}`}>
+                        {getOrderStatusLabel(group.status)}
+                      </span>
+                      <span>{getOrderCode(group)}</span>
+                    </div>
                   </div>
 
-                  <div className="order-product-grid">
-                    {group.items.map((order, index) => {
-                      const product = buildOrderProduct(order)
-                      const productId = getProductId(product)
-                      const productName = getProductName(product) || 'Товар'
-                      const imageUrl = resolveProductImage(product)
-                      const quantity = getOrderQuantity(order)
-                      const unitPrice = getOrderUnitPrice(order)
-                      const lineTotal = getOrderLineTotal(order)
-                      const tileKey = `${getOrderId(order)}-${productId || index}`
-                      const canReviewProduct = canReviewOrder(order) && Boolean(productId)
-                      const myReview = productId ? myProductReviews[productId] : null
-                      const hasMyReview = Boolean(myReview)
+                  <div className="order-card__body">
+                    <div className="order-card__summary">
+                      <span>Сумма заказа</span>
+                      <strong>{getOrderGroupTotal(group)}</strong>
+                      <small>{group.items.length} {pluralizeProducts(group.items.length)}</small>
+                      <button
+                        className="button button-ghost button-small"
+                        type="button"
+                        onClick={() => cancellableOrders.forEach((order) => onCancelOrder(getOrderId(order)))}
+                        disabled={!isAuthorized || isCancelling || cancellableOrders.length === 0}
+                      >
+                        {isCancelling ? 'Отменяем...' : 'Отменить заказ'}
+                      </button>
+                    </div>
 
-                      return (
-                        <article
-                          key={tileKey}
-                          className={`order-product-tile ${productId ? '' : 'order-product-tile--disabled'}`}
-                        >
-                          <button
-                            className="order-product-tile__open"
-                            type="button"
-                            onClick={() => onOpenProduct(product)}
-                            disabled={!productId}
-                            aria-label={`Открыть карточку ${productName}`}
+                    <div className="order-product-grid">
+                      {group.items.map((order, index) => {
+                        const product = buildOrderProduct(order)
+                        const productId = getProductId(product)
+                        const productName = getProductName(product) || 'Товар'
+                        const imageUrl = resolveProductImage(product)
+                        const quantity = getOrderQuantity(order)
+                        const unitPrice = getOrderUnitPrice(order)
+                        const lineTotal = getOrderLineTotal(order)
+                        const tileKey = `${getOrderId(order)}-${productId || index}`
+                        const canReviewProduct = canReviewOrder(order) && Boolean(productId)
+                        const myReview = productId ? myProductReviews[productId] : null
+                        const hasMyReview = Boolean(myReview)
+
+                        return (
+                          <article
+                            key={tileKey}
+                            className={`order-product-tile ${productId ? '' : 'order-product-tile--disabled'}`}
                           >
-                            <span className="order-product-tile__image">
-                              {imageUrl ? (
-                                <img src={imageUrl} alt={productName} />
-                              ) : (
-                                <span className="image-fallback">{productName.slice(0, 1) || '?'}</span>
-                              )}
-                            </span>
-                            <strong className="order-product-tile__name">{productName}</strong>
-                            <dl className="order-product-tile__details">
-                              <div>
-                                <dt>Кол-во</dt>
-                                <dd>{quantity}</dd>
-                              </div>
-                              <div>
-                                <dt>За единицу</dt>
-                                <dd>{formatPrice(unitPrice)}</dd>
-                              </div>
-                              <div className="order-product-tile__line-total">
-                                <dt>За товар</dt>
-                                <dd>{formatPrice(lineTotal)}</dd>
-                              </div>
-                            </dl>
-                          </button>
+                            <button
+                              className="order-product-tile__open"
+                              type="button"
+                              onClick={() => onOpenProduct(product)}
+                              disabled={!productId}
+                              aria-label={`Открыть карточку ${productName}`}
+                            >
+                              <span className="order-product-tile__image">
+                                {imageUrl ? (
+                                  <img src={imageUrl} alt={productName} />
+                                ) : (
+                                  <span className="image-fallback">{productName.slice(0, 1) || '?'}</span>
+                                )}
+                              </span>
+                              <strong className="order-product-tile__name">{productName}</strong>
+                              <dl className="order-product-tile__details">
+                                <div>
+                                  <dt>Кол-во</dt>
+                                  <dd>{quantity}</dd>
+                                </div>
+                                <div>
+                                  <dt>За единицу</dt>
+                                  <dd>{formatPrice(unitPrice)}</dd>
+                                </div>
+                                <div className="order-product-tile__line-total">
+                                  <dt>За товар</dt>
+                                  <dd>{formatPrice(lineTotal)}</dd>
+                                </div>
+                              </dl>
+                            </button>
 
-                          {canReviewProduct ? (
-                            <div className="order-product-review">
-                              {hasMyReview ? (
-                                <span className="order-product-review__status">
-                                  Отзыв оставлен <b>★ {toText(myReview.rating)}</b>
-                                </span>
-                              ) : null}
-                              <button
-                                className="button button-secondary button-small"
-                                type="button"
-                                onClick={() => openReviewForm({ productId, productName, mode: hasMyReview ? 'update' : 'create' }, myReview)}
-                              >
-                                {hasMyReview ? 'Изменить отзыв' : 'Оставить отзыв'}
-                              </button>
-                            </div>
-                          ) : null}
-                        </article>
-                      )
-                    })}
+                            {canReviewProduct ? (
+                              <div className="order-product-review">
+                                {hasMyReview ? (
+                                  <span className="order-product-review__status">
+                                    Отзыв оставлен <b>★ {toText(myReview.rating)}</b>
+                                  </span>
+                                ) : null}
+                                <button
+                                  className="button button-secondary button-small"
+                                  type="button"
+                                  onClick={() => openReviewForm({ productId, productName, mode: hasMyReview ? 'update' : 'create' }, myReview)}
+                                >
+                                  {hasMyReview ? 'Изменить отзыв' : 'Оставить отзыв'}
+                                </button>
+                              </div>
+                            ) : null}
+                          </article>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              </article>
-            )
-          })
-        )}
-      </div>
+                </article>
+              )
+            })
+          )}
+        </div>
+      </section>
 
       {reviewTarget ? (
         <div
@@ -506,7 +508,7 @@ function OrdersSection({
           </div>
         </div>
       ) : null}
-    </section>
+    </>
   )
 }
 
@@ -650,65 +652,67 @@ function AccountReviewsSection({
   }
 
   return (
-    <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
-      <div className="section-head">
-        <div>
-          <h2>Мои отзывы</h2>
+    <>
+      <section className={`surface-card account-panel ${isAuthorized ? '' : 'panel-locked'}`}>
+        <div className="section-head">
+          <div>
+            <h2>Мои отзывы</h2>
+          </div>
         </div>
-      </div>
 
-      {reviews.length === 0 ? (
-        <div className="empty-panel compact-empty">Вы пока не оставляли отзывы.</div>
-      ) : (
-        <div className="account-review-list">
-          {reviews.map(({ product, review }) => {
-            const productName = getProductName(product) || `Товар #${toText(review.product_id ?? review.productId)}`
-            const imageUrl = resolveProductImage(product)
-            const images = Array.isArray(review.images) ? review.images : []
+        {reviews.length === 0 ? (
+          <div className="empty-panel compact-empty">Вы пока не оставляли отзывы.</div>
+        ) : (
+          <div className="account-review-list">
+            {reviews.map(({ product, review }) => {
+              const productName = getProductName(product) || `Товар #${toText(review.product_id ?? review.productId)}`
+              const imageUrl = resolveProductImage(product)
+              const images = Array.isArray(review.images) ? review.images : []
 
-            return (
-              <article key={toText(review.id)} className="account-review-card">
-                <button className="account-review-card__product" type="button" onClick={() => onOpenProduct(product)}>
-                  <span className="account-review-card__image">
-                    {imageUrl ? <img src={imageUrl} alt={productName} /> : <span className="image-fallback">{productName.slice(0, 1) || '?'}</span>}
-                  </span>
-                  <span>
-                    <strong>{productName}</strong>
-                    <small>{formatDateTime(review.updated_at ?? review.updatedAt ?? review.created_at ?? review.createdAt)}</small>
-                  </span>
-                </button>
+              return (
+                <article key={toText(review.id)} className="account-review-card">
+                  <button className="account-review-card__product" type="button" onClick={() => onOpenProduct(product)}>
+                    <span className="account-review-card__image">
+                      {imageUrl ? <img src={imageUrl} alt={productName} /> : <span className="image-fallback">{productName.slice(0, 1) || '?'}</span>}
+                    </span>
+                    <span>
+                      <strong>{productName}</strong>
+                      <small>{formatDateTime(review.updated_at ?? review.updatedAt ?? review.created_at ?? review.createdAt)}</small>
+                    </span>
+                  </button>
 
-                <div className="account-review-card__body">
-                  <div className="account-review-card__rating" aria-label={`${toText(review.rating)} из 5`}>
-                    {[1, 2, 3, 4, 5].map((item) => (
-                      <span key={item} className={item <= Number.parseInt(review.rating, 10) ? 'active' : ''}>★</span>
-                    ))}
-                  </div>
-                  <p>{toText(review.comment)}</p>
-
-                  {images.length > 0 ? (
-                    <div className="account-review-card__images">
-                      {images.map((image, index) => (
-                        <img key={`${toText(image?.url)}-${index}`} src={toText(image?.url)} alt="" />
+                  <div className="account-review-card__body">
+                    <div className="account-review-card__rating" aria-label={`${toText(review.rating)} из 5`}>
+                      {[1, 2, 3, 4, 5].map((item) => (
+                        <span key={item} className={item <= Number.parseInt(review.rating, 10) ? 'active' : ''}>★</span>
                       ))}
                     </div>
-                  ) : null}
+                    <p>{toText(review.comment)}</p>
 
-                  <div className="account-review-card__actions">
-                    <button
-                      className="button button-secondary button-small"
-                      type="button"
-                      onClick={() => openReviewEditor(product, review)}
-                    >
-                      Изменить отзыв
-                    </button>
+                    {images.length > 0 ? (
+                      <div className="account-review-card__images">
+                        {images.map((image, index) => (
+                          <img key={`${toText(image?.url)}-${index}`} src={toText(image?.url)} alt="" />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div className="account-review-card__actions">
+                      <button
+                        className="button button-secondary button-small"
+                        type="button"
+                        onClick={() => openReviewEditor(product, review)}
+                      >
+                        Изменить отзыв
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      )}
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </section>
 
       {reviewTarget ? (
         <div
@@ -738,7 +742,7 @@ function AccountReviewsSection({
           </div>
         </div>
       ) : null}
-    </section>
+    </>
   )
 }
 
