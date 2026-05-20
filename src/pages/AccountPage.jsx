@@ -33,6 +33,7 @@ export function AccountPage({
   depositAddresses,
   transactions,
   topUps,
+  rubTopUpForm,
   favoriteItems,
   busyKeys,
   onProfileChange,
@@ -42,6 +43,8 @@ export function AccountPage({
   onAddressSubmit,
   onCancelOrder,
   onReloadDashboard,
+  onRubTopUpChange,
+  onCreateRubTopUp,
   onLogout,
   onReloadAddresses,
   onOpenProduct,
@@ -147,8 +150,11 @@ export function AccountPage({
               depositAddresses={depositAddresses}
               transactions={transactions}
               topUps={topUps}
+              rubTopUpForm={rubTopUpForm}
               busyKeys={busyKeys}
               onReloadDashboard={onReloadDashboard}
+              onRubTopUpChange={onRubTopUpChange}
+              onCreateRubTopUp={onCreateRubTopUp}
               hasPrivateData={hasPrivateData}
             />
           ) : null}
@@ -752,12 +758,16 @@ function AccountWalletSection({
   depositAddresses = [],
   transactions = [],
   topUps = [],
+  rubTopUpForm,
   busyKeys,
   onReloadDashboard,
+  onRubTopUpChange,
+  onCreateRubTopUp,
   hasPrivateData,
 }) {
   const wallets = buildAccountWallets(wallet, depositAddresses, topUps)
   const [selectedCurrency, setSelectedCurrency] = useState('')
+  const [topUpOpen, setTopUpOpen] = useState(false)
   const selectedWallet = wallets.find((item) => item.currency === selectedCurrency)
 
   if (selectedWallet) {
@@ -795,7 +805,7 @@ function AccountWalletSection({
           </div>
 
           <div className="wallet-actions">
-            <button className="wallet-action" type="button" disabled={!isAuthorized || isUsdt}>
+            <button className="wallet-action" type="button" disabled={!isAuthorized || isUsdt} onClick={() => setTopUpOpen(true)}>
               Пополнить
             </button>
             <button className="wallet-action" type="button" disabled={!isAuthorized || isUsdt}>
@@ -845,6 +855,59 @@ function AccountWalletSection({
               )}
             </div>
           </section>
+        ) : null}
+
+        {topUpOpen && !isUsdt ? (
+          <div
+            className="modal-overlay"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) {
+                setTopUpOpen(false)
+              }
+            }}
+          >
+            <section className="surface-card modal-card rub-topup-modal" role="dialog" aria-modal="true" aria-labelledby="account-rub-topup-title">
+              <button className="modal-close" type="button" onClick={() => setTopUpOpen(false)} aria-label="Закрыть">
+                ×
+              </button>
+              <form className="rub-topup-form" onSubmit={onCreateRubTopUp}>
+                <div className="modal-copy">
+                  <h2 id="account-rub-topup-title">Пополнение RUB</h2>
+                  <p>Выберите сумму и способ оплаты. После создания платежа откроется страница провайдера.</p>
+                </div>
+                <label className="field">
+                  <span>Сумма</span>
+                  <input
+                    className="field-control"
+                    value={rubTopUpForm?.amount || ''}
+                    onChange={(event) => onRubTopUpChange?.((current) => ({ ...current, amount: event.target.value }))}
+                    inputMode="decimal"
+                    placeholder="1000"
+                    required
+                  />
+                </label>
+                <div className="rub-topup-methods" role="radiogroup" aria-label="Способ оплаты">
+                  {[
+                    ['sbp', 'СБП'],
+                    ['card', 'Карта'],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={`rub-topup-method ${rubTopUpForm?.method === value ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => onRubTopUpChange?.((current) => ({ ...current, method: value }))}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button className="button button-primary wide-button" type="submit" disabled={busyKeys.rubTopUp}>
+                  {busyKeys.rubTopUp ? 'Создаем платеж...' : 'Перейти к оплате'}
+                </button>
+              </form>
+            </section>
+          </div>
         ) : null}
       </div>
     )
