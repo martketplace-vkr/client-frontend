@@ -56,6 +56,7 @@ export function useStorefrontController() {
   const [transactions, setTransactions] = useState([])
   const [topUps, setTopUps] = useState([])
   const [topUpForm, setTopUpForm] = useState({ amount: '10.000000' })
+  const [rubTopUpForm, setRubTopUpForm] = useState({ amount: '1000', method: 'sbp' })
   const [withdrawalForm, setWithdrawalForm] = useState({ amount: '', destination: '' })
   const [productReviews, setProductReviews] = useState([])
   const [productReviewSummary, setProductReviewSummary] = useState(null)
@@ -782,6 +783,38 @@ export function useStorefrontController() {
     }
   }
 
+  async function handleCreateRubTopUp(event) {
+    event.preventDefault()
+    setBusy('rubTopUp', true)
+
+    try {
+      const amount = rubTopUpForm.amount.trim()
+      const method = rubTopUpForm.method || 'sbp'
+      if (!amount) {
+        throw new Error('Введите сумму пополнения.')
+      }
+
+      const response = await authedRequest('/api/v1/balance/top-ups/rub', {
+        method: 'POST',
+        body: { amount, method },
+      })
+      const topUp = response.topUp || response.top_up
+      const paymentUrl = toText(topUp?.paymentUrl ?? topUp?.payment_url).trim()
+      if (!paymentUrl) {
+        throw new Error('Провайдер не вернул ссылку на оплату.')
+      }
+
+      startTransition(() => {
+        setTopUps((current) => [topUp, ...current].filter(Boolean))
+      })
+      window.location.assign(paymentUrl)
+    } catch (error) {
+      handleError(error)
+    } finally {
+      setBusy('rubTopUp', false)
+    }
+  }
+
   async function handleCreateWithdrawal(event) {
     event.preventDefault()
     setBusy('withdrawal', true)
@@ -1475,11 +1508,14 @@ export function useStorefrontController() {
       transactions,
       topUps,
       topUpForm,
+      rubTopUpForm,
       withdrawalForm,
       busyKeys,
       onTopUpChange: setTopUpForm,
+      onRubTopUpChange: setRubTopUpForm,
       onWithdrawalChange: setWithdrawalForm,
       onCreateCryptoTopUp: handleCreateCryptoTopUp,
+      onCreateRubTopUp: handleCreateRubTopUp,
       onCreateWithdrawal: handleCreateWithdrawal,
       onReloadDashboard: handleReloadDashboard,
       onOpenWallet: (currency) => navigate(`/wallet/${currency}`),

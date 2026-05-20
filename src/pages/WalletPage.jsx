@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { compactStatus, copyText, formatDateTime, formatMoney, toText } from '../helpers'
 
 const RUB_WALLET = {
@@ -17,10 +18,13 @@ export function WalletPage({
   depositAddresses,
   transactions,
   topUps,
+  rubTopUpForm,
   busyKeys,
   onReloadDashboard,
   onOpenWallet,
   onBackToWallets,
+  onRubTopUpChange,
+  onCreateRubTopUp,
   hasPrivateData,
 }) {
   const rubWallet = buildRubWallet(wallet)
@@ -35,6 +39,9 @@ export function WalletPage({
         transactions={selectedWallet.currency === 'usdt' ? transactions : []}
         onBack={onBackToWallets}
         onReloadDashboard={onReloadDashboard}
+        rubTopUpForm={rubTopUpForm}
+        onRubTopUpChange={onRubTopUpChange}
+        onCreateRubTopUp={onCreateRubTopUp}
         hasPrivateData={hasPrivateData}
         busyKeys={busyKeys}
         isAuthorized={isAuthorized}
@@ -79,8 +86,9 @@ export function WalletPage({
   )
 }
 
-function WalletDetails({ wallet, transactions, onBack, onReloadDashboard, hasPrivateData, busyKeys, isAuthorized }) {
+function WalletDetails({ wallet, transactions, onBack, onReloadDashboard, rubTopUpForm, onRubTopUpChange, onCreateRubTopUp, hasPrivateData, busyKeys, isAuthorized }) {
   const isUsdt = wallet.currency === 'usdt'
+  const [topUpOpen, setTopUpOpen] = useState(false)
 
   return (
     <div className="page-content wallet-layout">
@@ -112,7 +120,7 @@ function WalletDetails({ wallet, transactions, onBack, onReloadDashboard, hasPri
         </div>
 
         <div className="wallet-actions">
-          <button className="wallet-action" type="button" disabled={!isAuthorized || isUsdt}>
+          <button className="wallet-action" type="button" disabled={!isAuthorized || isUsdt} onClick={() => setTopUpOpen(true)}>
             Пополнить
           </button>
           <button className="wallet-action" type="button" disabled={!isAuthorized || isUsdt}>
@@ -161,6 +169,59 @@ function WalletDetails({ wallet, transactions, onBack, onReloadDashboard, hasPri
             )}
           </div>
         </section>
+      ) : null}
+
+      {topUpOpen && !isUsdt ? (
+        <div
+          className="modal-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setTopUpOpen(false)
+            }
+          }}
+        >
+          <section className="surface-card modal-card rub-topup-modal" role="dialog" aria-modal="true" aria-labelledby="rub-topup-title">
+            <button className="modal-close" type="button" onClick={() => setTopUpOpen(false)} aria-label="Закрыть">
+              ×
+            </button>
+            <form className="rub-topup-form" onSubmit={onCreateRubTopUp}>
+              <div className="modal-copy">
+                <h2 id="rub-topup-title">Пополнение RUB</h2>
+                <p>Выберите сумму и способ оплаты. После создания платежа откроется страница провайдера.</p>
+              </div>
+              <label className="field">
+                <span>Сумма</span>
+                <input
+                  className="field-control"
+                  value={rubTopUpForm?.amount || ''}
+                  onChange={(event) => onRubTopUpChange?.((current) => ({ ...current, amount: event.target.value }))}
+                  inputMode="decimal"
+                  placeholder="1000"
+                  required
+                />
+              </label>
+              <div className="rub-topup-methods" role="radiogroup" aria-label="Способ оплаты">
+                {[
+                  ['sbp', 'СБП'],
+                  ['card', 'Карта'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    className={`rub-topup-method ${rubTopUpForm?.method === value ? 'active' : ''}`}
+                    type="button"
+                    onClick={() => onRubTopUpChange?.((current) => ({ ...current, method: value }))}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button className="button button-primary wide-button" type="submit" disabled={busyKeys.rubTopUp}>
+                {busyKeys.rubTopUp ? 'Создаем платеж...' : 'Перейти к оплате'}
+              </button>
+            </form>
+          </section>
+        </div>
       ) : null}
     </div>
   )
