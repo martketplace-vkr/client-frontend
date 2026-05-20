@@ -1,10 +1,12 @@
 import {
   formatPrice,
+  getAddressParts,
   getProductDescription,
   getProductId,
   getProductName,
   resolveProductImage,
   shortText,
+  toText,
 } from '../helpers'
 import { QuantityStepper } from '../components/storefront/ProductSections'
 
@@ -13,6 +15,9 @@ export function CartPage({
   total,
   totalCount,
   allSelected,
+  isAuthorized,
+  addresses = [],
+  selectedDeliveryAddressId,
   checkoutBusy,
   onOpenProduct,
   onQuantityChange,
@@ -20,8 +25,11 @@ export function CartPage({
   onToggleAllSelected,
   onRemove,
   onClearCart,
+  onSelectDeliveryAddress,
   onCheckout,
 }) {
+  const hasDeliveryAddress = addresses.length > 0
+
   return (
     <div className="page-content cart-layout">
       <section className="surface-card section-block">
@@ -111,12 +119,43 @@ export function CartPage({
 
         </div>
 
-        <button className="button button-primary wide-button" type="button" onClick={onCheckout} disabled={checkoutBusy || totalCount === 0}>
-          {checkoutBusy ? 'Оформляем...' : totalCount === 0 ? 'Выберите товары' : 'Перейти к оформлению'}
+        <div className="checkout-delivery">
+          <strong>Адрес доставки</strong>
+          {!isAuthorized ? (
+            <p>Войдите, чтобы выбрать адрес доставки.</p>
+          ) : !hasDeliveryAddress ? (
+            <p>Добавьте адрес в профиле, чтобы оформить заказ.</p>
+          ) : (
+            <div className="checkout-address-list">
+              {addresses.map((address) => {
+                const addressId = getAddressId(address)
+                return (
+                  <label key={addressId} className={`checkout-address-option ${toText(selectedDeliveryAddressId) === addressId ? 'active' : ''}`}>
+                    <input
+                      type="radio"
+                      name="delivery-address"
+                      value={addressId}
+                      checked={toText(selectedDeliveryAddressId) === addressId}
+                      onChange={() => onSelectDeliveryAddress(addressId)}
+                    />
+                    <span>{getAddressParts(address).join(', ') || 'Адрес'}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <button className="button button-primary wide-button" type="button" onClick={onCheckout} disabled={checkoutBusy || totalCount === 0 || !hasDeliveryAddress}>
+          {checkoutBusy ? 'Оформляем...' : totalCount === 0 ? 'Выберите товары' : !hasDeliveryAddress ? 'Добавьте адрес' : 'Перейти к оформлению'}
         </button>
       </aside>
     </div>
   )
+}
+
+function getAddressId(address) {
+  return toText(address?.id)
 }
 
 function TrashIcon() {

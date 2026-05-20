@@ -115,6 +115,7 @@ export function AccountPage({
           {activeNavItem === 'orders' ? (
             <OrdersSection
               isAuthorized={isAuthorized}
+              addresses={addresses}
               orders={orders}
               busyKeys={busyKeys}
               onCancelOrder={onCancelOrder}
@@ -329,6 +330,7 @@ function DeliverySection({
 
 function OrdersSection({
   isAuthorized,
+  addresses = [],
   orders,
   busyKeys,
   onCancelOrder,
@@ -341,6 +343,7 @@ function OrdersSection({
   onReviewSubmit,
 }) {
   const orderGroups = groupOrders(orders)
+  const addressById = new Map(addresses.map((address) => [toText(address.id), address]))
   const [reviewTarget, setReviewTarget] = useState(null)
 
   function openReviewForm(target, review) {
@@ -391,6 +394,12 @@ function OrdersSection({
                       </span>
                       <span>{getOrderCode(group)}</span>
                     </div>
+                  </div>
+
+                  <div className="order-card__statuses">
+                    <span>Оплата: <b>{getPaymentStatusLabel(group.paymentStatus)}</b></span>
+                    <span>Заказ: <b>{getOrderStatusLabel(group.status)}</b></span>
+                    <span>Доставка: <b>{getOrderAddressLabel(group, addressById)}</b></span>
                   </div>
 
                   <div className="order-card__body">
@@ -1074,6 +1083,16 @@ const ORDER_STATUS_LABELS = {
   canecelled_by_seller: 'Отменен продавцом',
 }
 
+const PAYMENT_STATUS_LABELS = {
+  pending_funds: 'Ожидает средств',
+  reserved: 'Средства зарезервированы',
+  captured: 'Оплачено',
+  released: 'Резерв снят',
+  expired: 'Истекло время оплаты',
+  cancelled: 'Отменено',
+  failed: 'Ошибка оплаты',
+}
+
 function groupOrders(orders) {
   const groups = new Map()
 
@@ -1088,7 +1107,8 @@ function groupOrders(orders) {
         key,
         checkoutID,
         createdAt,
-        status: order?.status,
+        status: getOrderFulfillmentStatus(order),
+        paymentStatus: getOrderPaymentStatus(order),
         items: [],
       })
     }
@@ -1099,6 +1119,7 @@ function groupOrders(orders) {
   return Array.from(groups.values()).map((group) => ({
     ...group,
     status: resolveGroupStatus(group.items),
+    paymentStatus: resolveGroupPaymentStatus(group.items),
     createdAt: group.createdAt || getOrderCreatedAt(group.items[0]),
     items: group.items.sort((a, b) => Number.parseInt(getOrderId(a), 10) - Number.parseInt(getOrderId(b), 10)),
   }))
@@ -1109,7 +1130,7 @@ function resolveGroupStatus(orders) {
     return ''
   }
 
-  const statuses = orders.map((order) => normalizeStatus(order?.status)).filter(Boolean)
+  const statuses = orders.map((order) => normalizeStatus(getOrderFulfillmentStatus(order))).filter(Boolean)
   const uniqueStatuses = new Set(statuses)
 
   if (uniqueStatuses.size === 1) {
@@ -1121,6 +1142,24 @@ function resolveGroupStatus(orders) {
   }
 
   return orders[0]?.status || ''
+}
+
+function resolveGroupPaymentStatus(orders) {
+  if (orders.length === 0) {
+    return ''
+  }
+  const statuses = orders.map((order) => normalizeStatus(getOrderPaymentStatus(order))).filter(Boolean)
+  const uniqueStatuses = new Set(statuses)
+  if (uniqueStatuses.size === 1) {
+    return statuses[0]
+  }
+  if (statuses.some((status) => status === 'failed' || status === 'expired')) {
+    return statuses.find((status) => status === 'failed' || status === 'expired')
+  }
+  if (statuses.some((status) => status === 'reserved')) {
+    return 'reserved'
+  }
+  return statuses[0] || ''
 }
 
 function getOrderId(order) {
@@ -1138,6 +1177,32 @@ function getOrderCreatedAt(order) {
 function getOrderStatusLabel(status) {
   const normalized = normalizeStatus(status)
   return ORDER_STATUS_LABELS[normalized] || compactStatus(status)
+}
+
+function getPaymentStatusLabel(status) {
+  const normalized = normalizeStatus(status)
+  return PAYMENT_STATUS_LABELS[normalized] || compactStatus(status)
+}
+
+function getOrderPaymentStatus(order) {
+  return toText(order?.paymentStatus ?? order?.payment_status)
+}
+
+function getOrderFulfillmentStatus(order) {
+  return toText(order?.fulfillmentStatus ?? order?.fulfillment_status ?? order?.status)
+}
+
+function getOrderDeliveryAddressId(order) {
+  return toText(order?.deliveryAddressId ?? order?.delivery_address_id)
+}
+
+function getOrderAddressLabel(group, addressById) {
+  const addressId = group.items.map(getOrderDeliveryAddressId).find(Boolean)
+  const address = addressById.get(addressId)
+  if (!address) {
+    return 'адрес не найден'
+  }
+  return getAddressParts(address).join(', ')
 }
 
 function normalizeStatus(status) {
@@ -1320,7 +1385,7 @@ function pluralizeProducts(count) {
 }
 
 function canCancelOrder(order) {
-  const status = normalizeStatus(order?.status)
+  const status = normalizeStatus(getOrderFulfillmentStatus(order))
   return ![
     'cancelled',
     'canceled',
@@ -1336,5 +1401,5 @@ function canCancelOrder(order) {
 }
 
 function canReviewOrder(order) {
-  return normalizeStatus(order?.status) === 'success'
+  return normalizeStatus(getOrderFulfillmentStatus(order)) === 'success'
 }

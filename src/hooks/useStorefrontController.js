@@ -50,6 +50,7 @@ export function useStorefrontController() {
   const [productsNextPageToken, setProductsNextPageToken] = useState('')
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [addresses, setAddresses] = useState([])
+  const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] = useState('')
   const [orders, setOrders] = useState([])
   const [wallet, setWallet] = useState(null)
   const [depositAddresses, setDepositAddresses] = useState([])
@@ -78,6 +79,15 @@ export function useStorefrontController() {
   const [recentItems, setRecentItems] = useState(() => readStoredCollection(RECENT_KEY))
   const toastIdRef = useRef(0)
   const deferredSearch = useDeferredValue(search)
+
+  useEffect(() => {
+    setSelectedDeliveryAddressId((current) => {
+      if (addresses.some((address) => toText(address.id) === toText(current))) {
+        return current
+      }
+      return toText(addresses[0]?.id)
+    })
+  }, [addresses])
 
   const isAuthorized = Boolean(accessToken)
   const categoryOptions = flattenCategories(categories)
@@ -1314,6 +1324,12 @@ export function useStorefrontController() {
       return
     }
 
+    const deliveryAddressId = Number.parseInt(toText(selectedDeliveryAddressId), 10)
+    if (!Number.isInteger(deliveryAddressId) || deliveryAddressId <= 0) {
+      notify('Выберите адрес доставки перед оформлением.', 'warning')
+      return
+    }
+
     setBusy('checkout', true)
 
     try {
@@ -1339,6 +1355,7 @@ export function useStorefrontController() {
           checkout_id: `web-${Date.now()}-${Math.random().toString(16).slice(2)}`,
           product_ids: productIds,
           expected_cart_version: 0,
+          delivery_address_id: deliveryAddressId,
         },
       })
 
@@ -1454,6 +1471,8 @@ export function useStorefrontController() {
       totalCount: cartCount,
       allSelected: allCartItemsSelected,
       isAuthorized,
+      addresses,
+      selectedDeliveryAddressId,
       addressCount: isAuthorized ? addresses.length : 0,
       checkoutBusy: busyKeys.checkout,
       onOpenProduct: goToProduct,
@@ -1462,6 +1481,7 @@ export function useStorefrontController() {
       onToggleAllSelected: toggleAllCartSelected,
       onRemove: removeFromCart,
       onClearCart: clearCart,
+      onSelectDeliveryAddress: setSelectedDeliveryAddressId,
       onCheckout: handleCheckout,
     },
     account: {

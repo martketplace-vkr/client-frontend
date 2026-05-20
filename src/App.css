@@ -1041,6 +1041,48 @@
   gap: 12px;
 }
 
+.checkout-delivery {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.checkout-delivery > strong {
+  color: var(--ink);
+}
+
+.checkout-delivery p {
+  margin: 0;
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+.checkout-address-list {
+  display: grid;
+  gap: 8px;
+}
+
+.checkout-address-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(245, 248, 255, 0.78);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.checkout-address-option.active {
+  border-color: var(--blue);
+  background: rgba(0, 105, 255, 0.08);
+}
+
+.checkout-address-option input {
+  margin-top: 2px;
+}
+
 .purchase-box {
   display: grid;
   gap: 16px;
@@ -1202,6 +1244,26 @@
 .order-status-pill.status-cancelled_by_seller {
   background: rgba(255, 124, 71, 0.12);
   color: #dc5a2b;
+}
+
+.order-card__statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -6px;
+}
+
+.order-card__statuses span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(245, 248, 255, 0.82);
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.order-card__statuses b {
+  color: var(--ink);
 }
 
 .order-card__body {
