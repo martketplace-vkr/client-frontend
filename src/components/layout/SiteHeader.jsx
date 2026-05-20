@@ -18,7 +18,6 @@ export function SiteHeader({
         <span className="brand-mark__badge">M</span>
         <span className="brand-mark__copy">
           <strong>Маркетплейс</strong>
-          <span>быстрые покупки каждый день</span>
         </span>
       </button>
 
