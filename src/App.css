@@ -2540,9 +2540,11 @@
 }
 
 .transaction-modal {
+  position: relative;
   display: grid;
   gap: 22px;
   width: min(100%, 480px);
+  overflow: hidden;
 }
 
 .transaction-modal__hero {
@@ -2578,9 +2580,11 @@
 }
 
 .transaction-modal__rows > div {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+  align-items: center;
   gap: 16px;
+  min-width: 0;
 }
 
 .transaction-modal__rows span {
@@ -2590,6 +2594,7 @@
 .transaction-modal__rows code,
 .transaction-modal__rows strong {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-align: right;
   text-overflow: ellipsis;
@@ -2900,6 +2905,7 @@
 }
 
 .modal-card {
+  position: relative;
   width: min(100%, 520px);
   padding: 24px;
 }
