@@ -2,6 +2,7 @@ import { startTransition, useDeferredValue, useEffect, useEffectEvent, useRef, u
 import {
   ApiError,
   apiRequest,
+  getApiBaseUrl,
   getStoredAccessToken,
   getStoredRefreshToken,
   setStoredAccessToken,
@@ -79,6 +80,8 @@ export function useStorefrontController() {
   const [favoriteItems, setFavoriteItems] = useState(() => readStoredCollection(FAVORITES_KEY))
   const [recentItems, setRecentItems] = useState(() => readStoredCollection(RECENT_KEY))
   const toastIdRef = useRef(0)
+  const notificationSocketRef = useRef(null)
+  const notificationReconnectRef = useRef(0)
   const deferredSearch = useDeferredValue(search)
 
   useEffect(() => {
@@ -161,6 +164,14 @@ export function useStorefrontController() {
     })
     notify(ACCOUNT_ACCESS_MESSAGE, 'warning')
   })
+  const handleNotificationMessage = useEffectEvent((payload, token) => {
+    if (payload?.type !== 'crypto_top_up_confirmed') {
+      return
+    }
+
+    notify(`Пополнение USDT подтверждено: +${formatNotificationAmount(payload.amount)} USDT`, 'success')
+    void loadPrivateDashboard(token, true)
+  })
 
   useEffect(() => {
     handleBootstrapEffect()
@@ -181,6 +192,61 @@ export function useStorefrontController() {
   useEffect(() => {
     handleProtectedRouteEffect(route, isAuthorized, sessionStatus)
   }, [route, isAuthorized, sessionStatus])
+
+  useEffect(() => {
+    if (!accessToken || sessionStatus !== 'active') {
+      return undefined
+    }
+
+    let stopped = false
+    let reconnectAttempt = 0
+
+    function connect() {
+      const token = getStoredAccessToken() || accessToken
+      if (!token || stopped) {
+        return
+      }
+
+      const socket = new WebSocket(buildNotificationWebSocketURL(token))
+      notificationSocketRef.current = socket
+
+      socket.onopen = () => {
+        reconnectAttempt = 0
+      }
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data)
+          handleNotificationMessage(payload, token)
+        } catch {
+          // Ignore malformed notification frames.
+        }
+      }
+      socket.onerror = () => {
+        socket.close()
+      }
+      socket.onclose = () => {
+        if (stopped) {
+          return
+        }
+
+        reconnectAttempt += 1
+        const delay = Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt, 5))
+        window.clearTimeout(notificationReconnectRef.current)
+        notificationReconnectRef.current = window.setTimeout(connect, delay)
+      }
+    }
+
+    connect()
+
+    return () => {
+      stopped = true
+      window.clearTimeout(notificationReconnectRef.current)
+      if (notificationSocketRef.current) {
+        notificationSocketRef.current.close()
+        notificationSocketRef.current = null
+      }
+    }
+  }, [accessToken, sessionStatus])
 
   useEffect(() => {
     const syncRoute = () => {
@@ -1598,4 +1664,21 @@ function getAccessTokenFromResponse(response, failureMessage, operation) {
 
   console.error(`Missing access token in ${operation} response.`, response)
   throw new Error(failureMessage)
+}
+
+function buildNotificationWebSocketURL(token) {
+  const url = new URL('/api/v1/balance/notifications/ws', getApiBaseUrl())
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.searchParams.set('access_token', token)
+  return url.toString()
+}
+
+function formatNotificationAmount(value) {
+  const normalized = toText(value).trim()
+  const parsed = Number.parseFloat(normalized.replace(/\s+/g, '').replace(',', '.'))
+  if (!Number.isFinite(parsed)) {
+    return normalized || '0'
+  }
+
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 8 }).format(parsed)
 }
