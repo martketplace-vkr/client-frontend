@@ -247,7 +247,7 @@ function WalletDetails({ wallet, transactions, onBack, onReloadDashboard, rubTop
   )
 }
 
-function TransactionDetailsModal({ transaction, onClose }) {
+export function TransactionDetailsModal({ transaction, onClose }) {
   return (
     <div
       className="modal-overlay"

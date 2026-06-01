@@ -13,7 +13,7 @@ import {
   toText,
 } from '../helpers'
 import { Field, FileUploadField } from '../ui'
-import { buildTransactionView, transactionHasCurrency } from './WalletPage'
+import { buildTransactionView, transactionHasCurrency, TransactionDetailsModal } from './WalletPage'
 
 const ACCOUNT_NAV_ITEMS = [
   { id: 'personal', label: 'Личные данные', icon: 'user' },
@@ -779,6 +779,7 @@ function AccountWalletSection({
   const wallets = buildAccountWallets(wallet, depositAddresses, topUps)
   const [selectedCurrency, setSelectedCurrency] = useState('')
   const [topUpOpen, setTopUpOpen] = useState(false)
+  const [selectedTransaction, setSelectedTransaction] = useState(null)
   const selectedWallet = wallets.find((item) => item.currency === selectedCurrency)
 
   if (selectedWallet) {
@@ -834,7 +835,8 @@ function AccountWalletSection({
           </div>
         </section>
 
-        <section className="surface-card wallet-info-card">
+        {isUsdt ? (
+          <section className="surface-card wallet-info-card">
     
             <h2>USDT TRC-20</h2>
             <div className="wallet-address-box">
@@ -844,9 +846,9 @@ function AccountWalletSection({
               </button>
             </div>
           </section>
+        ) : null}
 
-        {isUsdt ? (
-          <section className="surface-card wallet-info-card">
+        <section className="surface-card wallet-info-card">
       
             <h2>Последние операции</h2>
             <div className="wallet-transaction-list">
@@ -854,7 +856,12 @@ function AccountWalletSection({
                 <div className="empty-panel compact-empty">Транзакций пока нет.</div>
               ) : (
                 walletTransactions.map((transaction) => (
-                  <article key={transaction.id} className="wallet-transaction-row">
+                  <button
+                    key={transaction.id}
+                    className="wallet-transaction-row"
+                    type="button"
+                    onClick={() => setSelectedTransaction(transaction)}
+                  >
                     <span className={`wallet-transaction-icon wallet-transaction-icon-${transaction.tone}`}>
                       {transaction.icon}
                     </span>
@@ -869,11 +876,14 @@ function AccountWalletSection({
                       <strong className={transaction.sign === '+' ? 'positive' : transaction.sign === '-' ? 'negative' : ''}>{transaction.sign}{transaction.amount} {transaction.currency}</strong>
                       <span>{transaction.subtitle}</span>
                     </span>
-                  </article>
+                  </button>
                 ))
               )}
             </div>
           </section>
+
+        {selectedTransaction ? (
+          <TransactionDetailsModal transaction={selectedTransaction} onClose={() => setSelectedTransaction(null)} />
         ) : null}
 
         {topUpOpen && !isUsdt ? (
