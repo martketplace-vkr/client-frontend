@@ -1,5 +1,6 @@
 import {
   formatPrice,
+  formatUSDTPrice,
   getAddressParts,
   getProductDescription,
   getProductId,
@@ -13,6 +14,8 @@ import { QuantityStepper } from '../components/storefront/ProductSections'
 export function CartPage({
   items,
   total,
+  checkoutTotals = { rub: total, usdt: 0 },
+  checkoutCurrency = 'rub',
   totalCount,
   allSelected,
   isAuthorized,
@@ -26,6 +29,7 @@ export function CartPage({
   onRemove,
   onClearCart,
   onSelectDeliveryAddress,
+  onCheckoutCurrencyChange,
   onCheckout,
 }) {
   const hasDeliveryAddress = addresses.length > 0
@@ -110,13 +114,31 @@ export function CartPage({
       </section>
 
       <aside className="surface-card checkout-card">
-        <h2>{formatPrice(total)}</h2>
+        <h2>{checkoutCurrency === 'usdt' && checkoutTotals.usdt > 0 ? formatUSDTPrice(checkoutTotals.usdt) : formatPrice(checkoutTotals.rub)}</h2>
         <div className="checkout-card__rows">
           <div>
             <span>Выбрано товаров</span>
             <strong>{totalCount}</strong>
           </div>
 
+        </div>
+
+        <div className="checkout-delivery">
+          <strong>Валюта оплаты</strong>
+          <div className="checkout-address-list">
+            <label className={`checkout-address-option ${checkoutCurrency === 'rub' ? 'active' : ''}`}>
+              <input type="radio" name="checkout-currency" checked={checkoutCurrency === 'rub'} onChange={() => onCheckoutCurrencyChange('rub')} />
+              <span>RUB</span>
+            </label>
+            <label className={`checkout-address-option ${checkoutCurrency === 'usdt' ? 'active' : ''}`}>
+              <input type="radio" name="checkout-currency" checked={checkoutCurrency === 'usdt'} onChange={() => onCheckoutCurrencyChange('usdt')} />
+              <span>USDT TRC-20</span>
+            </label>
+          </div>
+          {checkoutCurrency === 'usdt' && checkoutTotals.rub > 0 ? (
+            <p>Товары без криптооплаты будут оформлены отдельно в RUB: {formatPrice(checkoutTotals.rub)}</p>
+          ) : null}
+          {checkoutCurrency === 'usdt' && checkoutTotals.usdt > 0 ? <p>В USDT: {formatUSDTPrice(checkoutTotals.usdt)}</p> : null}
         </div>
 
         <div className="checkout-delivery">

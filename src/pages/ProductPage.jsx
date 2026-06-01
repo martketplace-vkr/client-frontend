@@ -11,6 +11,7 @@ import {
   toText,
 } from '../helpers'
 import { RelatedProductGrid } from '../components/storefront/ProductSections'
+import { ProductCryptoPrice } from '../components/storefront/ProductSections'
 
 const reportReasons = [
   { value: 'content', label: 'Неприемлемое содержание' },
@@ -96,6 +97,7 @@ export function ProductPage({
                 <div>
                   <span className="purchase-box__label">Цена</span>
                   <strong className="purchase-box__price">{formatPrice(getProductPrice(product))}</strong>
+                  <ProductCryptoPrice product={product} />
                 </div>
                 <div className="purchase-box__actions">
                   <button className="button button-primary" type="button" onClick={() => onAddToCart(product, 1)}>

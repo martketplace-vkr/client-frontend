@@ -1,10 +1,13 @@
 import {
   formatPrice,
+  formatUSDTPrice,
   getCategoryId,
   getProductDescription,
   getProductId,
   getProductName,
   getProductPrice,
+  getProductCryptoPricingMode,
+  getProductEffectiveUSDTPrice,
   getStockCount,
   resolveProductImage,
   shortText,
@@ -123,6 +126,7 @@ function ProductCard({ product, isFavorite, onOpen, onToggleFavorite, onAddToCar
 
         <div className="product-card__body product-card__body--feed">
           <strong className="product-card__price">{formatPrice(getProductPrice(product))}</strong>
+          <ProductCryptoPrice product={product} />
           <button className="text-link text-link-title product-card__title" type="button" onClick={() => onOpen(product)}>
             {getProductName(product) || 'Без названия'}
           </button>
@@ -150,6 +154,7 @@ function ProductCard({ product, isFavorite, onOpen, onToggleFavorite, onAddToCar
       <div className="product-card__footer">
         <div>
           <strong>{formatPrice(getProductPrice(product))}</strong>
+          <ProductCryptoPrice product={product} />
           <span>В наличии: {getStockCount(product) || '0'}</span>
         </div>
 
@@ -164,6 +169,15 @@ function ProductCard({ product, isFavorite, onOpen, onToggleFavorite, onAddToCar
       </div>
     </article>
   )
+}
+
+export function ProductCryptoPrice({ product }) {
+  const usdtPrice = getProductEffectiveUSDTPrice(product)
+  if (!usdtPrice) {
+    return null
+  }
+
+  return <span className="product-crypto-price">{formatUSDTPrice(usdtPrice, getProductCryptoPricingMode(product) === 'rub_rate')}</span>
 }
 
 function ProductRatingMeta({ rating, reviewCount, compact = false }) {

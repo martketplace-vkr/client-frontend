@@ -1,4 +1,4 @@
-import { getProductPrice, toText } from '../helpers'
+import { getProductAcceptsCrypto, getProductEffectiveUSDTPrice, getProductPrice, toText } from '../helpers'
 
 export function normalizeQuantity(value) {
   const parsed = Number.parseInt(toText(value), 10)
@@ -42,4 +42,19 @@ export function buildCartLines(items) {
     quantity: normalizeQuantity(item.quantity),
     lineTotal: parsePriceValue(getProductPrice(item.snapshot || item)) * normalizeQuantity(item.quantity),
   }))
+}
+
+export function getCheckoutTotals(items, preferredCurrency = 'rub') {
+  return items.reduce(
+    (totals, item) => {
+      const product = item.snapshot || item
+      const quantity = normalizeQuantity(item.quantity)
+      const useUSDT = preferredCurrency === 'usdt' && getProductAcceptsCrypto(product) && getProductEffectiveUSDTPrice(product)
+      const currency = useUSDT ? 'usdt' : 'rub'
+      const value = useUSDT ? getProductEffectiveUSDTPrice(product) : getProductPrice(product)
+      totals[currency] += parsePriceValue(value) * quantity
+      return totals
+    },
+    { rub: 0, usdt: 0 },
+  )
 }

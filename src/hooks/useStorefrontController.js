@@ -21,7 +21,7 @@ import {
   toText,
 } from '../helpers'
 import { navItems } from '../marketplaceContent'
-import { buildCartLines, getCartCount, getCartTotal, normalizeQuantity } from '../app/commerce'
+import { buildCartLines, getCartCount, getCartTotal, getCheckoutTotals, normalizeQuantity } from '../app/commerce'
 import { readRoute } from '../app/router'
 import { CART_KEY, FAVORITES_KEY, RECENT_KEY, readStoredCollection, writeStoredCollection } from '../app/storage'
 
@@ -51,6 +51,7 @@ export function useStorefrontController() {
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [addresses, setAddresses] = useState([])
   const [selectedDeliveryAddressId, setSelectedDeliveryAddressId] = useState('')
+  const [checkoutCurrency, setCheckoutCurrency] = useState('rub')
   const [orders, setOrders] = useState([])
   const [wallet, setWallet] = useState(null)
   const [depositAddresses, setDepositAddresses] = useState([])
@@ -104,6 +105,7 @@ export function useStorefrontController() {
   const selectedCartIdSet = new Set(selectedCartIds)
   const selectedCartItems = cartItems.filter((item) => selectedCartIdSet.has(getProductId(item.snapshot)))
   const cartTotal = getCartTotal(selectedCartItems)
+  const checkoutTotals = getCheckoutTotals(selectedCartItems, checkoutCurrency)
   const cartCount = getCartCount(selectedCartItems)
   const cartLines = buildCartLines(cartItems).map((item) => ({
     ...item,
@@ -1356,6 +1358,7 @@ export function useStorefrontController() {
           product_ids: productIds,
           expected_cart_version: 0,
           delivery_address_id: deliveryAddressId,
+          preferred_currency_id: checkoutCurrency === 'usdt' ? 2001 : 1000,
         },
       })
 
@@ -1468,6 +1471,8 @@ export function useStorefrontController() {
     cart: {
       items: cartLines,
       total: cartTotal,
+      checkoutTotals,
+      checkoutCurrency,
       totalCount: cartCount,
       allSelected: allCartItemsSelected,
       isAuthorized,
@@ -1482,6 +1487,7 @@ export function useStorefrontController() {
       onRemove: removeFromCart,
       onClearCart: clearCart,
       onSelectDeliveryAddress: setSelectedDeliveryAddressId,
+      onCheckoutCurrencyChange: setCheckoutCurrency,
       onCheckout: handleCheckout,
     },
     account: {

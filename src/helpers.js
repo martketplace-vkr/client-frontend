@@ -91,6 +91,11 @@ export function populateProductForm(product) {
     name: getProductName(product),
     description: getProductDescription(product),
     price: getProductPrice(product),
+    acceptsCrypto: getProductAcceptsCrypto(product),
+    cryptoPricingMode: getProductCryptoPricingMode(product),
+    cryptoPriceUsdt: getProductCryptoPriceUSDT(product),
+    effectiveUsdtPrice: getProductEffectiveUSDTPrice(product),
+    rubPerUsdt: getProductRubPerUSDT(product),
     stockCount: getStockCount(product),
     attributesText: getProductAttributes(product)
       .map((attribute) => `${toText(attribute.name)}: ${toText(attribute.value)}`)
@@ -145,6 +150,26 @@ export function getProductPrice(product) {
   return toText(product?.price)
 }
 
+export function getProductAcceptsCrypto(product) {
+  return Boolean(product?.acceptsCrypto ?? product?.accepts_crypto)
+}
+
+export function getProductCryptoPricingMode(product) {
+  return toText(product?.cryptoPricingMode ?? product?.crypto_pricing_mode)
+}
+
+export function getProductCryptoPriceUSDT(product) {
+  return toText(product?.cryptoPriceUsdt ?? product?.crypto_price_usdt)
+}
+
+export function getProductEffectiveUSDTPrice(product) {
+  return toText(product?.effectiveUsdtPrice ?? product?.effective_usdt_price)
+}
+
+export function getProductRubPerUSDT(product) {
+  return toText(product?.rubPerUsdt ?? product?.rub_per_usdt)
+}
+
 export function getStockCount(product) {
   return toText(product?.stockCount ?? product?.stock_count)
 }
@@ -177,6 +202,16 @@ export function formatPrice(value) {
   }
 
   return normalized
+}
+
+export function formatUSDTPrice(value, approximate = false) {
+  const parsed = parsePriceNumber(toText(value))
+  if (parsed === null) {
+    return ''
+  }
+
+  const amount = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 8 }).format(parsed)
+  return `${approximate ? '≈ ' : ''}${amount} USDT`
 }
 
 export function formatMoney(money, fallback = '0') {
