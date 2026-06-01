@@ -396,7 +396,7 @@ export function useStorefrontController() {
     const [ordersResult, walletResult, transactionsResult, topUpsResult, depositAddressesResult] = await Promise.allSettled([
       apiRequest('/api/v1/orders', { token }),
       apiRequest('/api/v1/balance/wallet', { token }),
-      apiRequest('/api/v1/balance/transactions?currency_code=2001&limit=20&offset=0', { token }),
+      apiRequest('/api/v1/balance/transactions?limit=40&offset=0', { token }),
       apiRequest('/api/v1/balance/top-ups?limit=20&offset=0', { token }),
       apiRequest('/api/v1/balance/deposit-addresses', { token }),
     ])
