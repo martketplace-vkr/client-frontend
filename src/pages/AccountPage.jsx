@@ -849,20 +849,26 @@ function AccountWalletSection({
           <section className="surface-card wallet-info-card">
       
             <h2>Последние операции</h2>
-            <div className="account-list">
+            <div className="wallet-transaction-list">
               {walletTransactions.length === 0 ? (
                 <div className="empty-panel compact-empty">Транзакций пока нет.</div>
               ) : (
                 walletTransactions.map((transaction) => (
                   <article key={transaction.id} className="wallet-transaction-row">
-                    <div>
+                    <span className={`wallet-transaction-icon wallet-transaction-icon-${transaction.tone}`}>
+                      {transaction.icon}
+                    </span>
+                    <span className="wallet-transaction-copy">
                       <strong>{transaction.title}</strong>
-                      <span>{transaction.reason || transaction.referenceId || transaction.reference_id || 'Операция по кошельку'}</span>
-                    </div>
-                    <div>
+                      <span>
+                        {transaction.asset}
+                        {transaction.network ? <small>{transaction.network}</small> : null}
+                      </span>
+                    </span>
+                    <span className="wallet-transaction-amount">
                       <strong className={transaction.sign === '+' ? 'positive' : transaction.sign === '-' ? 'negative' : ''}>{transaction.sign}{transaction.amount} {transaction.currency}</strong>
                       <span>{transaction.subtitle}</span>
-                    </div>
+                    </span>
                   </article>
                 ))
               )}

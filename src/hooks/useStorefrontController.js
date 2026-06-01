@@ -416,6 +416,10 @@ export function useStorefrontController() {
         setSelectedProduct(nextProduct)
       })
 
+      if (nextProduct) {
+        void recordProductView(productId)
+      }
+
       await loadProductReviews(productId)
 
       if (rememberView && nextProduct) {
@@ -1681,4 +1685,53 @@ function formatNotificationAmount(value) {
   }
 
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 8 }).format(parsed)
+}
+
+function recordProductView(productId) {
+  const normalizedProductId = toText(productId).trim()
+  if (!normalizedProductId || hasRecordedProductViewToday(normalizedProductId)) {
+    return Promise.resolve()
+  }
+
+  markProductViewRecordedToday(normalizedProductId)
+  return apiRequest(`/api/v1/analytics/products/${encodeURIComponent(normalizedProductId)}/view`, {
+    method: 'POST',
+    body: { visitor_id: getVisitorId() },
+  }).catch(() => undefined)
+}
+
+function getVisitorId() {
+  const key = 'marketplace.visitor_id'
+  try {
+    const existing = window.localStorage.getItem(key)
+    if (existing) {
+      return existing
+    }
+
+    const next = window.crypto?.randomUUID ? window.crypto.randomUUID() : `visitor-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    window.localStorage.setItem(key, next)
+    return next
+  } catch {
+    return `visitor-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+}
+
+function hasRecordedProductViewToday(productId) {
+  try {
+    return window.localStorage.getItem(productViewGuardKey(productId)) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markProductViewRecordedToday(productId) {
+  try {
+    window.localStorage.setItem(productViewGuardKey(productId), '1')
+  } catch {
+    // Tracking must never block product opening.
+  }
+}
+
+function productViewGuardKey(productId) {
+  return `marketplace.product_view.${productId}.${new Date().toISOString().slice(0, 10)}`
 }
