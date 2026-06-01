@@ -5,6 +5,7 @@ import {
   copyText,
   formatDateTime,
   formatPrice,
+  formatUSDTPrice,
   getAddressParts,
   getProductId,
   getProductName,
@@ -12,6 +13,7 @@ import {
   toText,
 } from '../helpers'
 import { Field, FileUploadField } from '../ui'
+import { buildTransactionView, transactionHasCurrency } from './WalletPage'
 
 const ACCOUNT_NAV_ITEMS = [
   { id: 'personal', label: 'Личные данные', icon: 'user' },
@@ -458,11 +460,11 @@ function OrdersSection({
                                 </div>
                                 <div>
                                   <dt>За единицу</dt>
-                                  <dd>{formatPrice(unitPrice)}</dd>
+                                  <dd>{formatOrderMoney(unitPrice, order)}</dd>
                                 </div>
                                 <div className="order-product-tile__line-total">
                                   <dt>За товар</dt>
-                                  <dd>{formatPrice(lineTotal)}</dd>
+                                  <dd>{formatOrderMoney(lineTotal, order)}</dd>
                                 </div>
                               </dl>
                             </button>
@@ -781,6 +783,10 @@ function AccountWalletSection({
 
   if (selectedWallet) {
     const isUsdt = selectedWallet.currency === 'usdt'
+    const walletCurrencyCode = isUsdt ? '2001' : '1000'
+    const walletTransactions = transactions
+      .filter((transaction) => transactionHasCurrency(transaction, walletCurrencyCode))
+      .map((transaction) => buildTransactionView(transaction, walletCurrencyCode))
 
     return (
       <div className="account-wallet-detail-stack">
@@ -828,8 +834,7 @@ function AccountWalletSection({
           </div>
         </section>
 
-        {isUsdt ? (
-          <section className="surface-card wallet-info-card">
+        <section className="surface-card wallet-info-card">
     
             <h2>USDT TRC-20</h2>
             <div className="wallet-address-box">
@@ -839,25 +844,24 @@ function AccountWalletSection({
               </button>
             </div>
           </section>
-        ) : null}
 
         {isUsdt ? (
           <section className="surface-card wallet-info-card">
       
             <h2>Последние операции</h2>
             <div className="account-list">
-              {transactions.length === 0 ? (
+              {walletTransactions.length === 0 ? (
                 <div className="empty-panel compact-empty">Транзакций пока нет.</div>
               ) : (
-                transactions.map((transaction) => (
-                  <article key={toText(transaction.id)} className="account-row transaction-row">
+                walletTransactions.map((transaction) => (
+                  <article key={transaction.id} className="wallet-transaction-row">
                     <div>
-                      <strong>{compactStatus(transaction.type)}</strong>
+                      <strong>{transaction.title}</strong>
                       <span>{transaction.reason || transaction.referenceId || transaction.reference_id || 'Операция по кошельку'}</span>
                     </div>
                     <div>
-                      <strong>{compactStatus(transaction.status)}</strong>
-                      <span>{formatDateTime(transaction.postedAt ?? transaction.posted_at ?? transaction.createdAt ?? transaction.created_at)}</span>
+                      <strong className={transaction.sign === '+' ? 'positive' : transaction.sign === '-' ? 'negative' : ''}>{transaction.sign}{transaction.amount} {transaction.currency}</strong>
+                      <span>{transaction.subtitle}</span>
                     </div>
                   </article>
                 ))
@@ -1340,15 +1344,41 @@ function getOrderLineTotal(order) {
   return getOrderUnitPrice(order)
 }
 
-function getOrderGroupTotal(group) {
-  const totals = group.items.map((order) => parseMoneyAmount(getOrderLineTotal(order)))
+function getOrderCurrencyId(order) {
+  return toText(order?.currencyId ?? order?.currency_id ?? order?.payment?.currencyId ?? order?.payment?.currency_id) || '1000'
+}
 
-  if (totals.every((total) => total !== null)) {
-    return formatPrice(totals.reduce((sum, total) => sum + total, 0))
+function formatOrderMoney(value, orderOrCurrencyId) {
+  const currencyId = typeof orderOrCurrencyId === 'string' || typeof orderOrCurrencyId === 'number'
+    ? toText(orderOrCurrencyId)
+    : getOrderCurrencyId(orderOrCurrencyId)
+
+  return currencyId === '2001' ? formatUSDTPrice(value) : formatPrice(value)
+}
+
+function getOrderGroupTotal(group) {
+  const totalsByCurrency = group.items.reduce(
+    (accumulator, order) => {
+      const total = parseMoneyAmount(getOrderLineTotal(order))
+      if (total === null) {
+        accumulator.hasUnknown = true
+        return accumulator
+      }
+
+      const currencyId = getOrderCurrencyId(order)
+      accumulator.totals[currencyId] = (accumulator.totals[currencyId] || 0) + total
+      return accumulator
+    },
+    { totals: {}, hasUnknown: false },
+  )
+
+  const formattedTotals = Object.entries(totalsByCurrency.totals).map(([currencyId, total]) => formatOrderMoney(total, currencyId))
+  if (formattedTotals.length > 0 && !totalsByCurrency.hasUnknown) {
+    return formattedTotals.join(' + ')
   }
 
   if (group.items.length === 1) {
-    return formatPrice(getOrderLineTotal(group.items[0]))
+    return formatOrderMoney(getOrderLineTotal(group.items[0]), group.items[0])
   }
 
   return 'Сумма уточняется'

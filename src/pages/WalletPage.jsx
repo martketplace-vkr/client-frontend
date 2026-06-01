@@ -311,7 +311,7 @@ function WalletIcon({ wallet, compact = false }) {
   )
 }
 
-function buildTransactionView(transaction, currencyCode) {
+export function buildTransactionView(transaction, currencyCode) {
   const type = normalizeTransactionType(transaction.type)
   const referenceType = normalizeReferenceType(transaction.referenceType ?? transaction.reference_type)
   const status = normalizeTransactionStatus(transaction.status)
@@ -338,7 +338,7 @@ function buildTransactionView(transaction, currencyCode) {
   }
 }
 
-function transactionHasCurrency(transaction, currencyCode) {
+export function transactionHasCurrency(transaction, currencyCode) {
   return (transaction.entries || []).some((entry) => entryCurrencyCode(entry) === toText(currencyCode))
 }
 

@@ -107,7 +107,7 @@ export function useStorefrontController() {
   const cartTotal = getCartTotal(selectedCartItems)
   const checkoutTotals = getCheckoutTotals(selectedCartItems, checkoutCurrency)
   const cartCount = getCartCount(selectedCartItems)
-  const cartLines = buildCartLines(cartItems).map((item) => ({
+  const cartLines = buildCartLines(cartItems, checkoutCurrency).map((item) => ({
     ...item,
     selected: selectedCartIdSet.has(getProductId(item.snapshot)),
   }))

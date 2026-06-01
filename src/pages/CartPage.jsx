@@ -95,7 +95,7 @@ export function CartPage({
                       onDecrease={() => onQuantityChange(getProductId(item.snapshot), item.quantity - 1)}
                       onIncrease={() => onQuantityChange(getProductId(item.snapshot), item.quantity + 1)}
                     />
-                    <strong>{formatPrice(item.lineTotal)}</strong>
+                    <strong>{item.lineCurrency === 'usdt' ? formatUSDTPrice(item.lineTotal) : formatPrice(item.lineTotal)}</strong>
                     <button
                       className="icon-button cart-remove-button"
                       type="button"

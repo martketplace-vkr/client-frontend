@@ -36,12 +36,22 @@ export function getCartTotal(items) {
   )
 }
 
-export function buildCartLines(items) {
-  return items.map((item) => ({
-    ...item,
-    quantity: normalizeQuantity(item.quantity),
-    lineTotal: parsePriceValue(getProductPrice(item.snapshot || item)) * normalizeQuantity(item.quantity),
-  }))
+export function buildCartLines(items, preferredCurrency = 'rub') {
+  return items.map((item) => {
+    const product = item.snapshot || item
+    const quantity = normalizeQuantity(item.quantity)
+    const useUSDT = preferredCurrency === 'usdt' && getProductAcceptsCrypto(product) && getProductEffectiveUSDTPrice(product)
+    const lineCurrency = useUSDT ? 'usdt' : 'rub'
+    const price = useUSDT ? getProductEffectiveUSDTPrice(product) : getProductPrice(product)
+
+    return {
+      ...item,
+      quantity,
+      lineCurrency,
+      unitPrice: parsePriceValue(price),
+      lineTotal: parsePriceValue(price) * quantity,
+    }
+  })
 }
 
 export function getCheckoutTotals(items, preferredCurrency = 'rub') {
